@@ -682,7 +682,8 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão YouTube", "YouTube button"),
                     Ui.tr("Botão Crunchyroll", "Crunchyroll button")};
             return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão YouTube", "YouTube button"),
-                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão TCL Channel", "TCL Channel button")};
+                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão TCL Channel", "TCL Channel button"),
+                    Ui.tr("Botão VTVgo", "VTVgo button"), Ui.tr("Botão FPT Play", "FPT Play button"), Ui.tr("Botão Web", "Web button")};
         }
 
         private String[] keyValues() {
@@ -694,7 +695,7 @@ public class SettingsActivity extends Activity {
             return v;
         }
 
-        /** Installed TV apps, by name, after "Nothing": what a remote button can open. */
+        /** Installed TV apps, by name, after "Nothing", "Back" and "Screen off": what a remote button can open. */
         private void loadApps() {
             List<String[]> found = new ArrayList<>();
             for (String[] app : HomeApps.launchable(getContext())) {
@@ -706,6 +707,14 @@ public class SettingsActivity extends Activity {
             appPkgs.add("");
             // On Sony, "nothing" leaves the key to the TV, which opens its usual app.
             appLabels.add(RemoteKeys.SONY ? Ui.tr("Padrão da Sony", "Sony default") : Ui.tr("Nada", "Nothing"));
+            if (RemoteKeys.supported()) {
+                appPkgs.add(RemoteKeys.BACK);
+                appLabels.add(Ui.tr("Voltar", "Back"));
+            }
+            if (RemoteKeys.TCL) {   // TCL's Audio Only Mode (HomeMode.audioOnlyNow): other brands have no such menu
+                appPkgs.add(RemoteKeys.SCREEN_OFF);
+                appLabels.add(Ui.tr("Tela apagada (só áudio)", "Screen off (audio only)"));
+            }
             for (String[] f : found) {
                 appPkgs.add(f[0]);
                 appLabels.add(f[1]);

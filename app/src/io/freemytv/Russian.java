@@ -121,8 +121,13 @@ final class Russian {
             case "YouTube button": return "Кнопка YouTube";
             case "Prime Video button": return "Кнопка Prime Video";
             case "TCL Channel button": return "Кнопка TCL Channel";
+            case "VTVgo button": return "Кнопка VTVgo";
+            case "FPT Play button": return "Кнопка FPT Play";
+            case "Web button": return "Кнопка Web";
             case "Tabii button": return "Кнопка Tabii";
             case "Nothing": return "Ничего";
+            case "Screen off (audio only)": return "Экран выключен (только звук)";
+            case "Back": return "Назад";
             case "BRAVIA CORE button": return "Кнопка BRAVIA CORE";
             case "Disney+ button": return "Кнопка Disney+";
             case "Crunchyroll button": return "Кнопка Crunchyroll";

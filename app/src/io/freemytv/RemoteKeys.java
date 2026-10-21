@@ -1,5 +1,6 @@
 package io.freemytv;
 
+import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -19,6 +20,11 @@ import android.view.KeyEvent;
  */
 final class RemoteKeys {
     private RemoteKeys() {}
+
+    /** A button's value that does the system Back instead of opening an app (for a remote whose Back key is broken). */
+    static final String BACK = "action:back";
+    /** Same, for TCL's Audio Only Mode: the screen goes off, the sound goes on (HomeMode.audioOnlyNow). */
+    static final String SCREEN_OFF = "action:screenoff";
 
     /** Some TCL remotes (BT_RC833) send TCL's own YouTube key instead of BUTTON_3: the same button. */
     private static final int KEY_YOUTUBE_TCL = 4065;
@@ -56,6 +62,20 @@ final class RemoteKeys {
         if (!ours) return false;
         String pkg = Prefs.keyApp(keyCode);
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
+        if (pkg.equals(BACK)) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0 && c instanceof AccessibilityService) {
+                AppLog.w("remote key " + e.getKeyCode() + " -> back");
+                ((AccessibilityService) c).performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK);
+            }
+            return true;
+        }
+        if (pkg.equals(SCREEN_OFF)) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                AppLog.w("remote key " + e.getKeyCode() + " -> audio only");
+                HomeMode.requestAudioOnly(c);
+            }
+            return true;
+        }
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
             Intent intent = launchIntent(c.getPackageManager(), pkg);
             AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));

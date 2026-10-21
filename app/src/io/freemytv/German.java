@@ -122,8 +122,13 @@ final class German {
             case "YouTube button": return "YouTube-Taste";
             case "Prime Video button": return "Prime-Video-Taste";
             case "TCL Channel button": return "TCL-Channel-Taste";
+            case "VTVgo button": return "VTVgo-Taste";
+            case "FPT Play button": return "FPT-Play-Taste";
+            case "Web button": return "Web-Taste";
             case "Tabii button": return "Tabii-Taste";
             case "Nothing": return "Nichts";
+            case "Screen off (audio only)": return "Bildschirm aus (nur Audio)";
+            case "Back": return "Zurück";
             case "BRAVIA CORE button": return "BRAVIA-CORE-Taste";
             case "Disney+ button": return "Disney+-Taste";
             case "Crunchyroll button": return "Crunchyroll-Taste";

@@ -173,6 +173,121 @@ final class HomeMode {
         if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
     }
 
+    /** A remote button asked for TCL's Audio Only Mode (the screen goes off, the sound goes on). */
+    static void requestAudioOnly(Context c) {
+        if (RemoteKeys.TCL) ModeJob.schedule(c, ModeJob.AUDIO_ONLY, null, 0);
+    }
+
+    /**
+     * Only TCL's own Settings can start Audio Only (it needs a system permission), so this uses its menu like a remote:
+     * Sound > Other Settings > Audio Only Mode > OK. Every step reads the screen first (uiautomator) and presses OK
+     * only on the row that has the focus; if the menu isn't what it expects (another language, another firmware),
+     * it backs out without choosing anything.
+     */
+    static void audioOnlyNow(Context app) {
+        try (Adb adb = Adb.connect(app, 10_000, null)) {
+            adb.shell("am start -S -a com.android.tv.action.VIEW_SOUND_SETTINGS");
+            if (choose(adb, "Sound", "Other Settings") && choose(adb, "Other Settings", "Audio Only Mode") && confirmAudioOnly(adb)) {
+                AppLog.w("audio only: asked");
+            } else {
+                AppLog.w("audio only: the menu wasn't as expected, nothing was chosen");
+                adb.shell("input keyevent KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK");
+            }
+        } catch (IOException e) {
+            AppLog.w("audio only: " + e.getMessage());
+        }
+    }
+
+    /** What TCL's Settings shows: the page title, its rows (their texts, in order) and which has the focus, or a dialog. */
+    private static final class Screen {
+        String title = "", dialog = "";
+        final List<String> rows = new ArrayList<>(), buttons = new ArrayList<>();
+        int focusedRow = -1, focusedButton = -1;
+    }
+
+    private static final Pattern UI_NODE = Pattern.compile("<node [^>]*>");
+    private static final Pattern UI_BOUNDS = Pattern.compile("bounds=\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\"");
+
+    private static String attr(String node, String name) {
+        Matcher m = Pattern.compile(" " + name + "=\"([^\"]*)\"").matcher(node);
+        return m.find() ? m.group(1) : "";
+    }
+
+    private static Screen readScreen(Adb adb) throws IOException {
+        String file = "/data/local/tmp/free-my-tv-ui.xml";
+        String xml = adb.shell("uiautomator dump " + file + " >/dev/null 2>&1; cat " + file + "; rm -f " + file);
+        List<String> nodes = new ArrayList<>();
+        Matcher m = UI_NODE.matcher(xml);
+        while (m.find()) nodes.add(m.group());
+        Screen screen = new Screen();
+        for (String node : nodes) {
+            String id = attr(node, "resource-id"), text = attr(node, "text");
+            if (id.endsWith(":id/page_title")) screen.title = text;
+            if (id.endsWith(":id/tv_element_dialog_content")) screen.dialog = text;
+            if (attr(node, "class").endsWith(".Button") && !text.isEmpty()) {
+                if ("true".equals(attr(node, "focused"))) screen.focusedButton = screen.buttons.size();
+                screen.buttons.add(text);
+            }
+            if (!attr(node, "class").endsWith(".FrameLayout") || !"true".equals(attr(node, "focusable"))) continue;
+            Matcher b = UI_BOUNDS.matcher(node);
+            if (!b.find()) continue;
+            int top = Integer.parseInt(b.group(2)), bottom = Integer.parseInt(b.group(4));
+            StringBuilder row = new StringBuilder();
+            for (String inner : nodes) {   // the row's label, value and summary: the texts that sit inside it
+                Matcher ib = UI_BOUNDS.matcher(inner);
+                String t = attr(inner, "text");
+                if (t.isEmpty() || !ib.find()) continue;
+                if (Integer.parseInt(ib.group(2)) >= top && Integer.parseInt(ib.group(4)) <= bottom) row.append(t).append(' ');
+            }
+            if ("true".equals(attr(node, "focused"))) screen.focusedRow = screen.rows.size();
+            screen.rows.add(row.toString());
+        }
+        return screen;
+    }
+
+    /** On page `title`: moves the focus to the row that contains `label` and presses OK on it. False if it can't. */
+    private static boolean choose(Adb adb, String title, String label) throws IOException {
+        for (int tries = 0; tries < 5; tries++) {
+            Screen s = readScreen(adb);
+            if (!s.title.equals(title)) continue;   // still opening (reading the screen takes a few seconds)
+            int want = -1;
+            for (int i = 0; i < s.rows.size(); i++) if (s.rows.get(i).contains(label)) want = i;
+            if (want < 0) return false;
+            if (s.focusedRow == want) {
+                adb.shell("input keyevent KEYCODE_DPAD_CENTER");
+                return true;
+            }
+            String key = s.focusedRow < 0 || want > s.focusedRow ? "KEYCODE_DPAD_DOWN" : "KEYCODE_DPAD_UP";
+            StringBuilder keys = new StringBuilder("input keyevent");
+            for (int i = 0, n = s.focusedRow < 0 ? 1 : Math.abs(want - s.focusedRow); i < n; i++) keys.append(' ').append(key);
+            adb.shell(keys.toString());
+            pause(300);
+        }
+        return false;
+    }
+
+    /** The "TV screen will turn off in 10 seconds" box: presses OK (the focus starts there; the right button if not). */
+    private static boolean confirmAudioOnly(Adb adb) throws IOException {
+        for (int tries = 0; tries < 4; tries++) {
+            Screen s = readScreen(adb);
+            if (s.dialog.isEmpty()) continue;
+            if (s.focusedButton >= 0 && "OK".equals(s.buttons.get(s.focusedButton))) {
+                adb.shell("input keyevent KEYCODE_DPAD_CENTER");
+                return true;
+            }
+            adb.shell("input keyevent KEYCODE_DPAD_RIGHT");
+        }
+        return false;
+    }
+
+    private static void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     static void ensureRemoteServiceNow(Context app) {
         if (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode"))) return;
         try (Adb adb = Adb.connect(app, 10_000, null)) {

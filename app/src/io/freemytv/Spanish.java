@@ -114,8 +114,13 @@ final class Spanish {
             case "YouTube button": return "Botón YouTube";
             case "Prime Video button": return "Botón Prime Video";
             case "TCL Channel button": return "Botón TCL Channel";
+            case "VTVgo button": return "Botón VTVgo";
+            case "FPT Play button": return "Botón FPT Play";
+            case "Web button": return "Botón Web";
             case "Tabii button": return "Botón Tabii";
             case "Nothing": return "Nada";
+            case "Screen off (audio only)": return "Pantalla apagada (solo audio)";
+            case "Back": return "Atrás";
             case "BRAVIA CORE button": return "Botón BRAVIA CORE";
             case "Disney+ button": return "Botón Disney+";
             case "Crunchyroll button": return "Botón Crunchyroll";
