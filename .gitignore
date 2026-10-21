@@ -3,6 +3,11 @@ config.properties
 *.keystore
 *.idsig
 
+# Your own background pictures (and the versions made from them) stay on your computer
+/backgrounds/
+app/assets/backgrounds/light-*.jpg
+app/assets/backgrounds/dark-*.jpg
+
 # Build output
 out/
 *.apk

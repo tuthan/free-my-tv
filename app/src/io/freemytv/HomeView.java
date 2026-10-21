@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
@@ -146,6 +147,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
     private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
     private Shader lightGradient;
+    // Day and night pictures for when there is no photo (app/assets/backgrounds/); null when missing.
+    private Bitmap skyLight, skyDark;
 
     // Shelf
     private List<HomeApps.Item> shelf = new ArrayList<>();
@@ -383,6 +386,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             cardRects[i] = new RectF();
         }
         makeLightButtons();
+        loadSky(a.getApplicationContext());
         recs.setLight(true);
         checkNight(false);
         sheetLayer.setVisibility(INVISIBLE);
@@ -2669,9 +2673,45 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             fill.setColorFilter(null);
         }
         imagePaint.setColorFilter(v);
+        if (bgTo == null || (fading && bgFrom == null)) {
+            drawImage(c, skyLight, 1);
+            drawImage(c, skyDark, night);
+        }
         if (fading && bgFrom != null) drawLightImage(c, bgFrom, bgTo == null ? 1 - e : 1);
         if (bgTo != null) drawLightImage(c, bgTo, fading ? e : 1);
         imagePaint.setColorFilter(null);
+    }
+
+    private void loadSky(Context c) {
+        LOADER.execute(() -> {
+            // light-1.jpg + dark-1.jpg, light-2.jpg + dark-2.jpg...: one pair a day, in turn; else light.jpg and dark.jpg.
+            int pairs = 0;
+            while (hasSky(c, "light-" + (pairs + 1)) && hasSky(c, "dark-" + (pairs + 1))) pairs++;
+            String n = pairs == 0 ? "" : "-" + (1 + (int) ((System.currentTimeMillis() / 86_400_000L) % pairs));
+            Bitmap light = sky(c, "light" + n), dark = sky(c, "dark" + n);
+            handler.post(() -> {
+                skyLight = light;
+                skyDark = dark;
+                invalidate();
+            });
+        });
+    }
+
+    private static boolean hasSky(Context c, String name) {
+        try (java.io.InputStream in = c.getAssets().open("backgrounds/" + name + ".jpg")) {
+            return true;
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
+
+    private static Bitmap sky(Context c, String name) {
+        try (java.io.InputStream in = c.getAssets().open("backgrounds/" + name + ".jpg")) {
+            return BitmapFactory.decodeStream(in);
+        } catch (java.io.IOException | RuntimeException e) {
+            AppLog.w("background " + name + ": " + e.getMessage());
+            return null;
+        }
     }
 
     private void drawLightImage(Canvas c, Backdrop b, float alpha) {
