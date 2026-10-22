@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
  *    through the digits, bent at the edges; Shaders.GLASS_TEXT) and the compact prices;
  *  - bottom left, the photo's caption: the time-of-day label ("TONIGHT"), the title, and genre · runtime · service.
  * Dark scrims only where there is text, stronger where the photo is bright. Any key exits (as on Apple TV).
- * Without photos (no TMDB key, or before the first fetch): the big clock over the night aurora.
+ * Without photos (no TMDB key, or before the first fetch): the big clock over the night aurora, wandering slowly.
  */
 final class DreamView extends View implements Choreographer.FrameCallback, HomeData.Listener, Recs.Listener {
     private static final long SHOW_MS = 30_000, FADE_MS = 3_000, FIRST_MS = 1_600;
@@ -57,6 +57,13 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private static final float DRIFT_X = 32, DRIFT_Y = 26;
     private static final long DIM_AFTER_MS = 600_000, DIM_MS = 4_000;
     private static final float CHROME_DIM = 0.7f, PHOTO_DIM = 0.85f;
+    /**
+     * Without photos the clock, date, weather and prices wander as one block, also from a point drawn at each start:
+     * 360 px each way across and up to 260 px up (never down: the prices already sit near the bottom edge), across on
+     * the 600 s period and up on 437 s, so the path doesn't repeat for days. They dim to 70% after ten minutes too.
+     */
+    private static final float WANDER_X = 360, WANDER_UP = 260;
+    private static final double WANDER_PERIOD_Y_S = 437;
 
     /** One photo on screen: the image, its motion (zooming in or out, toward a corner) and its caption. */
     private static final class Slide {
@@ -772,10 +779,11 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             }
             dirty = false;
         }
-        double phase = 2 * Math.PI * t / DRIFT_PERIOD_S;
-        content.setTranslationX((float) (40 * k * Math.sin(phase)));
-        content.setTranslationY((float) (26 * k * Math.sin(2 * phase + 0.7)));
-        content.setAlpha(alpha);
+        double across = 2 * Math.PI * t / DRIFT_PERIOD_S + driftPhase;
+        double rise = 2 * Math.PI * t / WANDER_PERIOD_Y_S + 2 * driftPhase;
+        content.setTranslationX(Math.round((float) (WANDER_X * k * Math.sin(across))));
+        content.setTranslationY(-Math.round((float) (WANDER_UP * k * (1 + Math.sin(rise)) / 2)));
+        content.setAlpha(alpha * (1 - (1 - CHROME_DIM) * fadeIn(up - startedAt - DIM_AFTER_MS, DIM_MS)));
         content.draw(canvas);
     }
 
