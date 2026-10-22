@@ -47,6 +47,16 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private static final float MARGIN = 80, RIGHT = 1840, TITLE_W = 900, META_BASE = 1008;
     private static final float DATE_BASE = 92, CLOCK_TOP = 120, CLOCK_SIZE = 200, QUOTES_GAP = 52;
     private static final double DRIFT_PERIOD_S = 600;
+    /**
+     * With photos, the corner and the caption drift on the same path, from a point on it drawn at each start (so short
+     * dreams don't all wear the same spot), 32 px across (not 40: the corner's right edge and the caption's left one
+     * stay 48 px from the screen's edge, the TV's overscan margin) and 26 down. After ten minutes the corner and the
+     * caption dim to 70% and the photo to 85%. Both against the burn-in of an OLED (the Rokid Max) and the image
+     * retention of an LCD.
+     */
+    private static final float DRIFT_X = 32, DRIFT_Y = 26;
+    private static final long DIM_AFTER_MS = 600_000, DIM_MS = 4_000;
+    private static final float CHROME_DIM = 0.7f, PHOTO_DIM = 0.85f;
 
     /** One photo on screen: the image, its motion (zooming in or out, toward a corner) and its caption. */
     private static final class Slide {
@@ -118,6 +128,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private String glassFor = "";
     private long startedAt, firstAt, lastFrame, lastSky;
     private int w, h;
+    private int driftX, driftY;     // the corner's and the caption's offset this frame, in whole pixels
+    private double driftPhase;      // where on the path this dream started
     private float k = 1;
     private long minute = -1;
     private String clock = "", date = "";
@@ -155,6 +167,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         }
         black.setColor(0xFF000000);
         shadowPaint.setColor(0xFF000000);
+        // Lines of text that never overlap: the dim's alpha goes per primitive, not through a full-screen layer a frame.
+        chrome.setHasOverlappingRendering(false);
     }
 
     void start() {
@@ -162,6 +176,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         running = true;
         if (worker.isShutdown()) worker = Executors.newSingleThreadExecutor();
         startedAt = clock();
+        driftPhase = Math.random() * 2 * Math.PI;
         lastFrame = 0;
         failed.clear();
         fallback = recs.showcase().isEmpty();
@@ -429,19 +444,34 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         if (current == null) return;
         if (fallback && first >= 1) fallback = false;
 
+        // The dim eases in over a few seconds, ten minutes after start(). The photos dim over black: the incoming one
+        // at e·d and the current one at d(1 - e)/(1 - d·e) add up to d times the plain crossfade, with no jump at its end.
+        float dim = fadeIn(up - startedAt - DIM_AFTER_MS, DIM_MS);
+        float d = 1 - (1 - PHOTO_DIM) * dim, corner = 1 - (1 - CHROME_DIM) * dim;
+        if (d < 1 && first >= 1) canvas.drawRect(0, 0, w, h, black);
         place(current, up, placeA);
         float e = incoming == null ? 0 : fadeIn(up - incoming.startedAt, FADE_MS);
-        drawPhoto(canvas, current, placeA, first);
+        drawPhoto(canvas, current, placeA, first * (incoming == null || d >= 1 ? d : d * (1 - e) / (1 - d * e)));
         if (incoming != null) {
             place(incoming, up, placeB);
-            drawPhoto(canvas, incoming, placeB, e);
+            drawPhoto(canvas, incoming, placeB, e * d);
         }
 
         if (chromeDirty) recordChrome();
-        chrome.setAlpha(first);
+        drift(up);
+        chrome.setAlpha(first * corner);
+        chrome.setTranslationX(driftX);
+        chrome.setTranslationY(driftY);
         chrome.draw(canvas);
-        drawGlass(canvas, first, e);
-        drawCaptions(canvas, up);
+        drawGlass(canvas, first * corner, e);
+        drawCaptions(canvas, up, corner);
+    }
+
+    /** The fallback's slow Lissajous path, from this dream's own point on it, rounded so the digits stay sharp. */
+    private void drift(long up) {
+        double phase = 2 * Math.PI * (up - startedAt) / 1000 / DRIFT_PERIOD_S + driftPhase;
+        driftX = Math.round((float) (DRIFT_X * k * Math.sin(phase)));
+        driftY = Math.round((float) (DRIFT_Y * k * Math.sin(2 * phase + 0.7)));
     }
 
     private static float fadeIn(long elapsed, long duration) {
@@ -562,12 +592,13 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         if (incoming != null) glassShader.setFloatUniform("placeB", placeB[0], placeB[1], placeB[2] * f);
         else glassShader.setFloatUniform("placeB", placeA[0], placeA[1], placeA[2] * f);
         glassShader.setFloatUniform("mixB", incoming == null ? 0 : e);
-        glassShader.setFloatUniform("origin", g.x, g.y);
+        int x = g.x + driftX, y = g.y + driftY;    // drifts with its shadow, in the corner
+        glassShader.setFloatUniform("origin", x, y);
         glassShader.setFloatUniform("ink", g.inkTop, g.inkHeight);
         glassShader.setFloatUniform("refraction", 14 * k);
         glassShader.setFloatUniform("specular", 1);
         glassShader.setFloatUniform("alpha", alpha);
-        c.drawRect(g.x, g.y, g.x + g.cover.getWidth(), g.y + g.cover.getHeight(), glassPaint);
+        c.drawRect(x, y, x + g.cover.getWidth(), y + g.cover.getHeight(), glassPaint);
     }
 
     /** Builds the glass clock's digits in the background (once a minute) and swaps them in when they're ready. */
@@ -690,28 +721,35 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             s.caption.endRecording();
         }
         s.caption.setPosition(0, 0, w, h);
+        s.caption.setHasOverlappingRendering(false);   // text lines only: the fades and the dim need no layer
     }
 
-    /** The caption fades out fast; the new one rises in once the photo has partly changed (like the home screen). */
-    private void drawCaptions(Canvas c, long up) {
+    /**
+     * The caption fades out fast; the new one rises in once the photo has partly changed (like the home screen). Both
+     * drift and dim with the corner.
+     */
+    private void drawCaptions(Canvas c, long up, float dim) {
         if (incoming == null) {
             float a = current.startedAt == firstAt ? fadeIn(up - firstAt - 700, 900) : 1;
-            current.caption.setAlpha(a);
-            current.caption.setTranslationY(14 * k * (1 - a));
+            current.caption.setAlpha(a * dim);
+            current.caption.setTranslationX(driftX);
+            current.caption.setTranslationY(driftY + 14 * k * (1 - a));
             current.caption.draw(c);
             return;
         }
         long t = up - incoming.startedAt;
         float out = 1 - Ui.clamp(t / 500f);
         if (out > 0.004f) {
-            current.caption.setAlpha(out);
-            current.caption.setTranslationY(0);
+            current.caption.setAlpha(out * dim);
+            current.caption.setTranslationX(driftX);
+            current.caption.setTranslationY(driftY);
             current.caption.draw(c);
         }
         float in = fadeIn(t - 1300, 900);
         if (in > 0.004f) {
-            incoming.caption.setAlpha(in);
-            incoming.caption.setTranslationY(14 * k * (1 - in));
+            incoming.caption.setAlpha(in * dim);
+            incoming.caption.setTranslationX(driftX);
+            incoming.caption.setTranslationY(driftY + 14 * k * (1 - in));
             incoming.caption.draw(c);
         }
     }

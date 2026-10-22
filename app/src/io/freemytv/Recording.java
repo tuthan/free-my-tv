@@ -24,6 +24,12 @@ abstract class Recording {
     abstract void setTranslationX(float x);
     abstract void setTranslationY(float y);
     abstract void draw(Canvas c);
+    /**
+     * Content that never overlaps itself (lines of text) can take an alpha below 1 per primitive instead of through a
+     * layer the size of the recording: on Android 10+ this skips that layer on every frame drawn with such an alpha.
+     * On Android 9 the picture keeps its saveLayerAlpha.
+     */
+    abstract void setHasOverlappingRendering(boolean has);
 
     private static final class Node extends Recording {
         private final RenderNode node;
@@ -40,6 +46,7 @@ abstract class Recording {
         @Override void setTranslationX(float x) { node.setTranslationX(x); }
         @Override void setTranslationY(float y) { node.setTranslationY(y); }
         @Override void draw(Canvas c) { c.drawRenderNode(node); }
+        @Override void setHasOverlappingRendering(boolean has) { node.setHasOverlappingRendering(has); }
     }
 
     private static final class Pic extends Recording {
@@ -64,6 +71,7 @@ abstract class Recording {
         @Override void setAlpha(float a) { alpha = Math.max(0, Math.min(1, a)); }
         @Override void setTranslationX(float x) { tx = x; }
         @Override void setTranslationY(float y) { ty = y; }
+        @Override void setHasOverlappingRendering(boolean has) {}
 
         @Override void draw(Canvas c) {
             if (alpha <= 0.004f) return;
