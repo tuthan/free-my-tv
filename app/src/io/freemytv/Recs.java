@@ -120,7 +120,7 @@ final class Recs {
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile int period = -1;
     private volatile long listAt;
-    private volatile boolean fetching;
+    private volatile boolean fetching, waitingLogged;
     private volatile String error = "";
     private volatile boolean light;     // light design: builds only the cards (all three tabs' cards fit in memory)
     private volatile long failedAt, keyStamp, linkRetryAt;
@@ -250,6 +250,13 @@ final class Recs {
     /** With a key: fetches the list if stale or the time of day (morning/afternoon/night) changed; then the details. */
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
+        if (!HomeData.networkUp(context)) {
+            // No back-off and no stamps touched: the next tick fetches as soon as the network is up.
+            if (!waitingLogged) AppLog.w("recommendations: waiting for the network");
+            waitingLogged = true;
+            return;
+        }
+        waitingLogged = false;
         long now = System.currentTimeMillis();
         long stamp = sourceStamp();   // a new key, country, animation choice or installed streaming-app set refetches
         boolean newKey = stamp != keyStamp;

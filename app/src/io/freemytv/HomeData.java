@@ -2,6 +2,9 @@ package io.freemytv;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -138,14 +141,16 @@ final class HomeData {
     volatile long pricesAt, weatherAt;
     volatile Weather weather = new Weather();
 
+    private final Context context;
     private final SharedPreferences cache;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    private volatile boolean fetchingPrices, fetchingWeather;
+    private volatile boolean fetchingPrices, fetchingWeather, waitingLogged;
     private volatile long pricesFailedAt, weatherFailedAt;
 
     private HomeData(Context c) {
+        context = c;
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
         inDollars = CURRENCY.equals(cache.getString("dollarsFor", ""));
         try {
@@ -168,6 +173,13 @@ final class HomeData {
 
     /** Fetches whatever is stale. The screen calls this when it appears and every minute while it's visible. */
     void refreshIfStale() {
+        if (!networkUp(context)) {
+            // Just woken, Wi-Fi not up yet: a fetch would fail on DNS and start a back-off. The next tick tries again.
+            if (!waitingLogged) AppLog.w("prices, weather: waiting for the network");
+            waitingLogged = true;
+            return;
+        }
+        waitingLogged = false;
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
         if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
@@ -212,6 +224,19 @@ final class HomeData {
                     fetchingWeather = false;
                 }
             });
+        }
+    }
+
+    /** True when the active network has been validated (it reaches the internet); also when the TV can't tell. */
+    static boolean networkUp(Context c) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return true;
+            Network n = cm.getActiveNetwork();
+            NetworkCapabilities caps = n == null ? null : cm.getNetworkCapabilities(n);
+            return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        } catch (RuntimeException e) {
+            return true;
         }
     }
 
