@@ -432,6 +432,7 @@ final class HomeMode {
             }
             busy(c, Ui.tr("Trocando o Início e a tela de descanso…", "Switching the home screen and screensaver…"));
             Watchdog.clear(c);
+            adbSecure(c, adb);
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
             adb.shell("settings put secure screensaver_components " + DREAM);
@@ -549,6 +550,21 @@ final class HomeMode {
         }
     }
 
+    /**
+     * XGIMI: ro.adb.secure, for the Home Screen page. "0" lets any computer on the network into the projector's ADB
+     * without asking (no adb_keys at all; note 01); the page says so while it is.
+     */
+    private static void adbSecure(Context c, Adb adb) {
+        try {
+            String v = adb.shell("getprop ro.adb.secure").trim();
+            JSONObject s = state(c);
+            s.put("adbSecure", v);
+            save(c, s);
+        } catch (IOException | JSONException e) {
+            AppLog.w("ro.adb.secure: " + e.getMessage());
+        }
+    }
+
     /** The recorded home screen; without one, Google TV's; without that, the system picks (we leave the role). */
     private static boolean restoreHome(Adb adb, String home) throws IOException {
         if (home.isEmpty() && adb.shell("pm path " + packageOf(GOOGLE_HOME)).contains("package:")) home = GOOGLE_HOME;
@@ -647,6 +663,7 @@ final class HomeMode {
                         fixed.add(pkg);
                     }
                 }
+                adbSecure(app, adb);
                 if (!reverted && !homeHolder(adb).contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("o Início", "the home screen"));

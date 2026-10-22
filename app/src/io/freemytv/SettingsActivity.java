@@ -140,6 +140,8 @@ public class SettingsActivity extends Activity {
         private boolean running, okDown, backDown, wasBusy;
         private StaticLayout errorLayout;   // the last error, wrapped (rebuilt only when it changes)
         private String errorShown;
+        private StaticLayout adbLayout;   // the Home Screen page's ADB line (XGIMI), wrapped
+        private String adbShown;
         private final Spoken spoken;
         private long startedAt, lastNanos, pendingAt, lastSky;
         private int w, h;
@@ -530,6 +532,21 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições.",
                     "Switching takes a few seconds; the screen blinks while it measures."), LIST_X * k + 30 * k,
                     (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k, hint);
+            // XGIMI ships ro.adb.secure=0 (read by HomeMode during the switch): its ADB asks no one.
+            if ("0".equals(state.optString("adbSecure"))) {   // never on a Google TV (ro.adb.secure=1); XGIMI projectors say 0
+                String text = Ui.tr("Este projetor deixa qualquer computador da rede se conectar sem perguntar.",
+                        "This projector lets any computer on the network connect without asking.");
+                int width = Math.round(760 * k);
+                if (adbLayout == null || !text.equals(adbShown) || adbLayout.getWidth() != width) {
+                    adbShown = text;
+                    adbLayout = StaticLayout.Builder.obtain(text, 0, text.length(), new TextPaint(warn), width)
+                            .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).build();
+                }
+                c.save();
+                c.translate(LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 86) * k - adbLayout.getLineBaseline(0));
+                adbLayout.draw(c);
+                c.restore();
+            }
         }
 
         private static int blend(int a, int b, float f) {

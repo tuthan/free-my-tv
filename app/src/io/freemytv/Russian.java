@@ -66,6 +66,7 @@ final class Russian {
             case "No ads, with the new screensaver": return "Без рекламы, с новой заставкой";
             case "The TV's factory home screen": return "Заводской главный экран телевизора";
             case "Switching takes a few seconds; the screen blinks while it measures.": return "Переключение занимает несколько секунд; во время замеров экран мигает.";
+            case "This projector lets any computer on the network connect without asking.": return "Этот проектор разрешает подключаться любому компьютеру в сети без запроса.";
             case "now": return "сейчас";
             case "Measuring the original home screen…": return "Замер заводского главного экрана…";
             case "Switching the home screen and screensaver…": return "Переключение главного экрана и заставки…";

@@ -57,6 +57,7 @@ final class Spanish {
             case "No ads, with the new screensaver": return "Sin anuncios, con el nuevo protector de pantalla";
             case "The TV's factory home screen": return "La pantalla de inicio de fábrica del TV";
             case "Switching takes a few seconds; the screen blinks while it measures.": return "El cambio tarda unos segundos; la pantalla parpadea durante las mediciones.";
+            case "This projector lets any computer on the network connect without asking.": return "Este proyector deja que cualquier computadora de la red se conecte sin preguntar.";
             case "now": return "ahora";
             case "Measuring the original home screen…": return "Midiendo la pantalla de inicio original…";
             case "Switching the home screen and screensaver…": return "Cambiando la pantalla de inicio y el protector de pantalla…";
