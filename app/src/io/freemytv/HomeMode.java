@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -186,17 +187,58 @@ final class HomeMode {
      * it backs out without choosing anything.
      */
     static void audioOnlyNow(Context app) {
+        // A new request replaces the job, but its thread keeps going: two runs would fight over the same menu.
+        if (!AUDIO_ONLY_RUNNING.compareAndSet(false, true)) {
+            AppLog.w("audio only: already running");
+            return;
+        }
+        sawSettings = false;
         try (Adb adb = Adb.connect(app, 10_000, null)) {
+            if (justWokeFromAudioOnly(adb)) {
+                AppLog.w("audio only: skipped, the screen just came on");
+                return;
+            }
             adb.shell("am start -S -a com.android.tv.action.VIEW_SOUND_SETTINGS");
             if (choose(adb, "Sound", "Other Settings") && choose(adb, "Other Settings", "Audio Only Mode") && confirmAudioOnly(adb)) {
                 AppLog.w("audio only: asked");
             } else {
                 AppLog.w("audio only: the menu wasn't as expected, nothing was chosen");
-                adb.shell("input keyevent KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK");
+                // Backs would leave whatever app is on screen if Settings never opened.
+                if (sawSettings) adb.shell("input keyevent KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK");
+                else AppLog.w("audio only: Settings never showed, nothing to back out of");
             }
         } catch (IOException e) {
             AppLog.w("audio only: " + e.getMessage());
+        } finally {
+            AUDIO_ONLY_RUNNING.set(false);
         }
+    }
+
+    private static final AtomicBoolean AUDIO_ONLY_RUNNING = new AtomicBoolean();
+    /** Whether readScreen saw a Settings page during this run (one run at a time, see AUDIO_ONLY_RUNNING). */
+    private static volatile boolean sawSettings;
+
+    private static final Pattern WAKE_AGO = Pattern.compile("\\((\\d+) ms ago\\)");
+    private static final Pattern SLEEP_REASON = Pattern.compile("mLastSleepReason=([\\w.-]+)");
+
+    /**
+     * TCL swallows the press that wakes the screen from Audio Only, so the next press (seconds later) would turn it
+     * off again. True when the screen came on less than 20 s ago from Audio Only; false if dumpsys can't tell.
+     */
+    private static boolean justWokeFromAudioOnly(Adb adb) throws IOException {
+        String out = adb.shell("dumpsys power | grep -E 'mLastWakeTime=|mLastSleepReason='");
+        Long ago = null;
+        for (String line : out.split("\n")) {
+            if (!line.contains("mLastWakeTime=")) continue;
+            Matcher m = WAKE_AGO.matcher(line);   // Android 12 lists one per display group: the first is the default
+            if (m.find()) {
+                try { ago = Long.parseLong(m.group(1)); } catch (NumberFormatException ignored) {}
+            }
+            break;
+        }
+        Matcher reason = SLEEP_REASON.matcher(out);
+        if (ago == null || !reason.find()) return false;
+        return ago < 20_000 && (reason.group(1).equals("screenless_mode") || reason.group(1).equals("only_screen_off"));
     }
 
     /** What TCL's Settings shows: the page title, its rows (their texts, in order) and which has the focus, or a dialog. */
@@ -223,7 +265,10 @@ final class HomeMode {
         Screen screen = new Screen();
         for (String node : nodes) {
             String id = attr(node, "resource-id"), text = attr(node, "text");
-            if (id.endsWith(":id/page_title")) screen.title = text;
+            if (id.endsWith(":id/page_title")) {
+                screen.title = text;
+                if (!text.isEmpty()) sawSettings = true;
+            }
             if (id.endsWith(":id/tv_element_dialog_content")) screen.dialog = text;
             if (attr(node, "class").endsWith(".Button") && !text.isEmpty()) {
                 if ("true".equals(attr(node, "focused"))) screen.focusedButton = screen.buttons.size();
