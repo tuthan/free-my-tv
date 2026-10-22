@@ -66,6 +66,10 @@ final class HomeMode {
         "com.tcl.messagebox", "com.tcl.usercenter",                                   // TCL messages and account
         "com.tcl.exhibit", "com.tcl.esticker", "com.tcl.hotelmenu",                   // store demo, hotel menu
         "com.tcl.repairguide", "com.tcl.ocean.instructions", "com.tcl.logkit",        // repair guide, manual, logs
+        "com.tcl.bi", "com.tcl.interactive",                                          // TCL usage reports, interactive ads (TIAS)
+        "com.tcl.overseasappshow",                                                    // app promos
+        "com.google.android.feedback", "com.google.android.partnersetup",             // Google extras the TCL lists name:
+        "com.google.android.tvrecommendations",                                       // feedback, partner setup, recommendations
         // Multilaser (Expressluck / CVTE board)
         "tv.anoki.acr.anokiacroptin",                                                 // Anoki ACR: watches what's on screen
         "fusion.android.tv.demo", "com.expressluck.tvhelpmanual",                     // store demo (also Xiaomi projectors), manual
