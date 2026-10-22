@@ -16,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
@@ -450,11 +452,14 @@ final class HomeMode {
             JSONObject before = state(c);
             before.put("keptOff", new JSONArray(sorted(keptOff)));
             save(c, before);
+            Set<String> ownPkgs = switchTime(home, dream);
+            Map<String, Boolean> inputs = new HashMap<>();
             int done = 0;
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.tr("Desligando apps (", "Turning off apps (") + done + "/" + targets.size() + ")…");
                 if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)) continue;
+                if (!ownPkgs.contains(pkg) && tvInput(adb, pkg, inputs)) continue;
                 String out = adb.shell("pm disable-user --user 0 " + pkg);
                 if (out.contains("disabled-user")) {
                     disabled.add(pkg);
@@ -628,12 +633,15 @@ final class HomeMode {
                 // Original to turn on.
                 List<String> keptOff = stringList(s, "keptOff");
                 protectedBackOn(adb, disabled, present);
+                Set<String> ownPkgs = switchTime(home, dream);
+                Map<String, Boolean> inputs = new HashMap<>();
                 for (String pkg : sorted(wanted)) {
                     if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg)) continue;
                     if (disabledNow.contains(pkg)) {
                         if (!keptOff.contains(pkg)) disabled.add(pkg);
                         continue;
                     }
+                    if (!ownPkgs.contains(pkg) && tvInput(adb, pkg, inputs)) continue;
                     if (adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user")) {
                         if (!keptOff.contains(pkg)) disabled.add(pkg);
                         fixed.add(pkg);
@@ -720,6 +728,54 @@ final class HomeMode {
         out.addAll(Arrays.asList(DEBLOAT));
         if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
         return out;
+    }
+
+    /** What a switch adds besides the lists: the TV's own home screen and screensaver, and Google TV's setup app. */
+    private static Set<String> switchTime(String home, String dream) {
+        Set<String> out = new HashSet<>(Collections.singleton(GOOGLE_SETUP));
+        if (packageOf(home) != null) out.add(packageOf(home));
+        if (packageOf(dream) != null) out.add(packageOf(dream));
+        return out;
+    }
+
+    private static final String TV_INPUT_HARDWARE = "android.permission.TV_INPUT_HARDWARE";
+
+    /**
+     * The input guard (note 09, C5): a list entry whose own requested permissions name TV_INPUT_HARDWARE runs a TV
+     * input (HDMI, tuner) and is never turned off, whatever list it is on. Asked once per switch per package
+     * (`seen` holds that switch's answers). Only that package's blocks count, not its shared UID's.
+     */
+    private static boolean tvInput(Adb adb, String pkg, Map<String, Boolean> seen) throws IOException {
+        Boolean known = seen.get(pkg);
+        if (known != null) return known;
+        // Not a plain package name: never put into a shell command, and left on.
+        boolean input = !pkg.matches("[\\w.]+") || requestsInput(adb.shell("dumpsys package " + pkg), pkg);
+        seen.put(pkg, input);
+        if (input) AppLog.w("input guard: " + pkg + " requests TV_INPUT_HARDWARE, left on");
+        return input;
+    }
+
+    private static final Pattern PACKAGE_BLOCK = Pattern.compile("^Package \\[([\\w.]+)\\]");
+
+    /** Whether a "requested permissions:" block inside pkg's own "Package [pkg]" block names TV_INPUT_HARDWARE. */
+    private static boolean requestsInput(String dumpsys, String pkg) {
+        String current = null;   // the package block we're in (null: another section, like SharedUser)
+        int block = -1;          // the indent of the requested permissions header we're under, or -1
+        for (String line : dumpsys.split("\n")) {
+            String t = line.trim();
+            if (t.isEmpty()) continue;
+            int indent = line.indexOf(t.charAt(0));
+            if (block >= 0 && indent <= block) block = -1;
+            Matcher m = PACKAGE_BLOCK.matcher(t);
+            if (m.find()) current = m.group(1);
+            else if (indent == 0 || t.startsWith("SharedUser [")) current = null;
+            if (t.equals("requested permissions:")) {
+                if (pkg.equals(current)) block = indent;
+            } else if (block >= 0 && (t.equals(TV_INPUT_HARDWARE) || t.startsWith(TV_INPUT_HARDWARE + ":"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The home screen in use now ("package/activity"): the HOME role holder, among the TV's home screens. */
