@@ -90,10 +90,15 @@ public class SettingsActivity extends Activity {
         if (preview != null) {
             // Like the real screensaver: arrows, OK or Back close it (other keys go on to the system).
             switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (preview.showsTerminal()) {   // the Terminal look: the next effect now, to go through them
+                        if (event.getAction() == KeyEvent.ACTION_UP) preview.nextEffect();
+                        return true;
+                    }
+                    // fall through: the other looks close
                 case KeyEvent.KEYCODE_DPAD_UP:
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                 case KeyEvent.KEYCODE_DPAD_LEFT:
-                case KeyEvent.KEYCODE_DPAD_RIGHT:
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_ENTER:
                 case KeyEvent.KEYCODE_BACK:
@@ -377,6 +382,8 @@ public class SettingsActivity extends Activity {
             c.drawText("Free My TV", cx, 612 * k, title);
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);
+            // The Terminal screensaver's credit; ttfx's and TerminalTextEffects' licences: assets/notices/ttfx.txt.
+            if (ttfx) c.drawText("Terminal: ttfx · TerminalTextEffects · MIT", cx, 740 * k, version);
 
             if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else drawList(c);
         }
@@ -1014,10 +1021,10 @@ public class SettingsActivity extends Activity {
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
-            // On the Screensaver row, the Terminal look's credit in its place (no room under eleven rows); the licences
-            // themselves are in the APK, assets/notices/ttfx.txt.
-            boolean credit = !keys && ttfx && row(focus) == LOOK_ROW;
-            String line = credit ? "Terminal: ttfx · TerminalTextEffects · MIT"
+            // On the Screensaver row OK previews instead (activate).
+            String line = !keys && row(focus) == LOOK_ROW
+                    ? Ui.tr("OK mostra, ← → mudam; no Terminal, → é o próximo efeito.",
+                            "OK previews it, ← → change it; in Terminal, → is the next effect.")
                     : Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value.");
             c.drawText(line, LIST_X * k + 30 * k, hy, hint);
             if (keys) {
@@ -1066,6 +1073,9 @@ public class SettingsActivity extends Activity {
             } else if (screen == HOME_SETTINGS && row(focus) == CITY_ROW) {
                 askCity();
                 return;
+            } else if (screen == HOME_SETTINGS && row(focus) == LOOK_ROW) {
+                pause();
+                activity.showPreview();     // the look chosen here; closing it comes back to this row
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);
                 invalidate();

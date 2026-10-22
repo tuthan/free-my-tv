@@ -89,6 +89,11 @@ final class TerminalLook {
         return failed;
     }
 
+    /** A new run with the next effect at the next frame drawn, rather than at the minute. */
+    void next() {
+        period = -1;
+    }
+
     void setSize(int width, int height) {
         w = width;
         h = height;

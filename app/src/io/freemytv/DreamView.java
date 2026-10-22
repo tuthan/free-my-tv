@@ -189,6 +189,16 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         this.cycleMs = cycleMs;
     }
 
+    /** The Terminal look is on screen (not its fallback). */
+    boolean showsTerminal() {
+        return terminal != null && !terminal.failed();
+    }
+
+    /** The Terminal look's next effect now, rather than at the minute (the preview's →). */
+    void nextEffect() {
+        if (showsTerminal()) terminal.next();
+    }
+
     void start() {
         if (running) return;
         running = true;
