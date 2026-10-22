@@ -121,6 +121,11 @@ CPSEP=:; BAT=; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) CPSEP=";"
 "$BT/d8$BAT" --release --min-api 28 --lib "$AJ" --output out $(find out/classes -name '*.class')
 if command -v zip >/dev/null; then (cd out && zip -qj base.apk classes.dex)
 else "${JAVA_HOME:+$JAVA_HOME/bin/}jar" -u -M -f out/base.apk -C out classes.dex; fi # Git Bash has no zip
+# Optional: ttfx for the Terminal screensaver, if native/build.sh has built it (with its licence, as an asset).
+if [ -f native/out/lib/armeabi-v7a/libttfx.so ]; then
+  (cd native/out && zip -qr ../../out/base.apk lib assets)
+  echo "With ttfx (the Terminal screensaver)."
+fi
 "$BT/zipalign" -f -p 4 out/base.apk out/aligned.apk
 
 # --- Sign with your own key (created once; updates need the same key, so keep freemytv.keystore)
