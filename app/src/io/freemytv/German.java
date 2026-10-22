@@ -41,7 +41,6 @@ final class German {
             case " of 2": return " von 2";
             case "Your TV's home screen and screensaver": return "Startbildschirm und Bildschirmschoner des Fernsehers";
             case "Home Screen": return "Startbildschirm";
-            case "OK previews it, ← → change it; in Terminal, → is the next effect.": return "OK zeigt ihn, ← → ändern ihn; bei Terminal ist → der nächste Effekt.";
             case "Photos and clock": return "Fotos und Uhr";
             case "Screensaver": return "Bildschirmschoner";
             case "Preview": return "Ansehen";

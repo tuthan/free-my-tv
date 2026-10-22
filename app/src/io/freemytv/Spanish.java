@@ -39,7 +39,6 @@ final class Spanish {
             case " of 2": return " de 2";
             case "Your TV's home screen and screensaver": return "Pantalla de inicio y protector de pantalla del TV";
             case "Home Screen": return "Pantalla de inicio";
-            case "OK previews it, ← → change it; in Terminal, → is the next effect.": return "OK lo muestra, ← → lo cambian; en Terminal, → es el siguiente efecto.";
             case "Photos and clock": return "Fotos y reloj";
             case "Screensaver": return "Protector de pantalla";
             case "Preview": return "Ver ahora";

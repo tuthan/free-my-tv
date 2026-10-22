@@ -48,7 +48,6 @@ final class Russian {
             case " of 2": return " из 2";
             case "Your TV's home screen and screensaver": return "Главный экран и заставка телевизора";
             case "Home Screen": return "Главный экран";
-            case "OK previews it, ← → change it; in Terminal, → is the next effect.": return "OK — показать, ← → — сменить; в Terminal → — следующий эффект.";
             case "Photos and clock": return "Фото и часы";
             case "Screensaver": return "Заставка";
             case "Preview": return "Предпросмотр";
