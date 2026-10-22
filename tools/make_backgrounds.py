@@ -1,7 +1,8 @@
 """Draws the home screen's day and night backgrounds (Pillow, numpy). Usage: python3 tools/make_backgrounds.py
 Without photos: soft color blobs on a flat base, light enough for dark text by day, dark enough for white text at night.
-With pictures in backgrounds/ (JPEG or PNG): a day and a night version of each one (cropped to 16:9, location data
-removed), light-N.jpg and dark-N.jpg in app/assets/backgrounds/; the home screen shows one pair a day, in turn.
+With pictures in backgrounds/ (JPEG or PNG): a day and a night version of each one (cropped to 16:9 at 1920 x 1080,
+location data removed), light-N.jpg and dark-N.jpg in app/assets/backgrounds/; the home screen shows one pair a day, in
+turn.
 backgrounds/ and the photo versions are in .gitignore: your pictures stay on your computer."""
 import glob
 import json
@@ -16,7 +17,8 @@ PHOTOS = os.path.join(ROOT, "backgrounds")
 # Optional backgrounds/focus.json, {"file name": 0.4}: where the 16:9 crop sits on a portrait or square picture
 # (0 = top, 1 = bottom). The middle otherwise.
 FOCUS_FILE = os.path.join(PHOTOS, "focus.json")
-W, H = 1280, 720
+W, H = 1280, 720     # the painted backgrounds: soft gradients, more pixels add nothing
+PW, PH = 1920, 1080  # the photo versions: the home screen's own size, drawn 1:1 instead of stretched 1.5 times
 
 # (x, y, radius, color, strength): positions and radius as a fraction of the width / height.
 # Free My TV on the TCL: a tropical lagoon. By day mango, turquoise, sky and leaf; at night jade and deep sea.
@@ -52,30 +54,32 @@ def paint(base, blobs, seed):
 
 
 def crop(img, focus):
-    """The largest 16:9 area, its vertical position set by `focus`, scaled to W x H."""
+    """The largest 16:9 area, its vertical position set by `focus`, scaled to PW x PH."""
     w, h = img.size
     ch = min(h, round(w * 9 / 16))
     cw = round(ch * 16 / 9)
     top = round((h - ch) * focus)
     left = (w - cw) // 2
-    return img.crop((left, top, left + cw, top + ch)).resize((W, H), Image.LANCZOS)
+    return img.crop((left, top, left + cw, top + ch)).resize((PW, PH), Image.LANCZOS)
 
 
 def fade(side_alpha, color):
-    """A left-to-right veil (strongest at the left, where the clock is) as an RGB image and a mask."""
-    x = np.linspace(0, 1, W, dtype=np.float32)[None, :].repeat(H, 0)
-    mask = np.clip(1 - x / 0.55, 0, 1) ** 1.5 * side_alpha
-    return Image.new("RGB", (W, H), color), Image.fromarray((mask * 255).astype(np.uint8))
+    """A left-to-right veil, strongest at the left edge and gone at 42% of the width (the clock, date and weather sit in
+    the left quarter), as an RGB image and a mask."""
+    x = np.linspace(0, 1, PW, dtype=np.float32)[None, :].repeat(PH, 0)
+    mask = np.clip(1 - x / 0.42, 0, 1) ** 1.5 * side_alpha
+    return Image.new("RGB", (PW, PH), color), Image.fromarray((mask * 255).astype(np.uint8))
 
 
 def treat(photo, light):
-    img = photo.filter(ImageFilter.GaussianBlur(3))
+    # Only enough blur to take the grain and JPEG noise off: the photo stays sharp, the veil keeps the text readable.
+    img = photo.filter(ImageFilter.GaussianBlur(1))
     if light:   # by day: washed toward white, so the dark text reads
-        img = Image.blend(img, Image.new("RGB", (W, H), (250, 249, 252)), 0.42)
-        veil, mask = fade(0.45, (250, 249, 252))
+        img = Image.blend(img, Image.new("RGB", (PW, PH), (250, 249, 252)), 0.32)
+        veil, mask = fade(0.5, (250, 249, 252))
     else:       # at night: dimmed and a little desaturated
-        img = Image.blend(ImageOps.autocontrast(img, 1), Image.new("RGB", (W, H), (8, 10, 20)), 0.68)
-        veil, mask = fade(0.45, (6, 8, 16))
+        img = Image.blend(ImageOps.autocontrast(img, 1), Image.new("RGB", (PW, PH), (8, 10, 20)), 0.6)
+        veil, mask = fade(0.5, (6, 8, 16))
     img.paste(veil, (0, 0), mask)
     return img
 
@@ -91,7 +95,7 @@ def photos():
         shot = crop(img, focus.get(os.path.basename(path), 0.5))
         for name, light in (("light", True), ("dark", False)):
             out = os.path.join(OUT, "%s-%d.jpg" % (name, n))
-            treat(shot, light).save(out, quality=88, optimize=True)
+            treat(shot, light).save(out, quality=90, optimize=True)
             print("Wrote", os.path.relpath(out, ROOT), "(%d KB)" % (os.path.getsize(out) // 1024), "from", os.path.basename(path))
 
 
