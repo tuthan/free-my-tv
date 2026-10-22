@@ -134,6 +134,7 @@
         <service
             android:name=".RemoteKeyService"
             android:process=":keys"
+            android:directBootAware="true"
             android:exported="true"
             android:label="Free My TV"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

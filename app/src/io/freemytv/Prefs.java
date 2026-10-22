@@ -1,7 +1,11 @@
 package io.freemytv;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.UserManager;
 import android.view.KeyEvent;
 
 import java.io.BufferedReader;
@@ -46,6 +50,31 @@ final class Prefs {
 
     static void init(Context c) {
         app = c.getApplicationContext();
+        if (unlocked()) {
+            onUnlocked();
+            return;
+        }
+        // Direct boot: :keys can start before the user's storage is unlocked, and SharedPreferences throw until then
+        // (keyApp copes: no file, every key opens its default). The rest waits for the unlock.
+        app.registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context ctx, Intent i) {
+                ctx.unregisterReceiver(this);
+                onUnlocked();
+            }
+        }, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
+        if (unlocked()) onUnlocked();   // unlocked between the check and the receiver
+    }
+
+    private static boolean unlocked() {
+        UserManager um = app.getSystemService(UserManager.class);
+        return um == null || um.isUserUnlocked();
+    }
+
+    private static boolean ready;   // main thread only
+
+    private static void onUnlocked() {
+        if (ready) return;
+        ready = true;
         migrateKeys();   // before anything reads the button choices
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
     }

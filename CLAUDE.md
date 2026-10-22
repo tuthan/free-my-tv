@@ -182,6 +182,8 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   Vestel, KTC (NextStar) and Sony TVs and Formovie projectors, the service is on only in Free My TV mode, and *Original* takes it out of the enabled accessibility
   services. The system waits for the service on every key, so it lives alone in the `:keys` process: what it reads is
   in `remote-keys.txt` (`Prefs.keyApp`), never in SharedPreferences, and `onKeyEvent` does no heavy work.
+  The service is direct boot aware, since Android 11 TCL sets skip other accessibility services at boot, so `:keys` can
+  start before the storage is unlocked: `Prefs.init` then leaves SharedPreferences alone until `ACTION_USER_UNLOCKED`.
   Vestel (F&U and other store brands; MediaTek, Android TV 14 tested) maps its Netflix button to `KEYCODE_STEM_1`, a
   global key (`dumpsys window policy` lists them) that the key filter sees first; its YouTube, Prime Video and Google
   Play buttons stay with the system. The stock lists needed no Vestel entries.
