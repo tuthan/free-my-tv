@@ -141,7 +141,7 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - the stock home screen and screensaver;
   - Google TV's recovery home, Play Games and YouTube Music;
   - on TCL TVs, the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps, TCL's usage
-    reports, interactive ads and app promos, and Google's feedback, partner setup and recommendations apps;
+    reports, interactive ads and app promos, TCL Home, TGuard (device-use tracking and a memory cleaner), and Google's feedback, partner setup and recommendations apps;
   - on Philco TVs, AI PONT (promo channels and app downloads) and the manual;
   - on Multilaser TVs, Anoki's screen-content recognition (ACR), the store demo and the manual;
   - on KTC-made TVs (NextStar), Anoki's screen-content recognition (ACR), the store demo and the manual;

@@ -68,6 +68,10 @@ final class HomeMode {
         "com.tcl.repairguide", "com.tcl.ocean.instructions", "com.tcl.logkit",        // repair guide, manual, logs
         "com.tcl.bi", "com.tcl.interactive",                                          // TCL usage reports, interactive ads (TIAS)
         "com.tcl.overseasappshow",                                                    // app promos
+        "com.tcl.dashboard",                                                          // TCL Home: account, messages, gifts, IoT
+        // TGuard: device-use tracking, memory cleaner. Runs as uid 1000; Wi-Fi owner check 2026-10-22: no network
+        // created by it
+        "com.tcl.guard",
         "com.google.android.feedback", "com.google.android.partnersetup",             // Google extras the TCL lists name:
         "com.google.android.tvrecommendations",                                       // feedback, partner setup, recommendations
         // Multilaser (Expressluck / CVTE board)
@@ -94,9 +98,9 @@ final class HomeMode {
     private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList(
         "com.tcl.ttvs", "com.tvos", "com.tcl.systemserver", "com.tcl.systemui.plugin", "com.tcl.tv", "com.tcl.tvinput",
         "com.tcl.hearaid", "com.dolby.android.audio.service", "com.tcl.globalkeyoverlay", "com.tcl.autopair",
-        "com.tcl.UpdatePeripheral", "com.tcl.dashboard", "com.tcl.suspension", "com.tcl.providers.config",
+        "com.tcl.UpdatePeripheral", "com.tcl.suspension", "com.tcl.providers.config",
         "com.tcl.gamebar", "com.tcl.airplay2", "com.mirakulo.astrotv.service", "com.tcl.initsetup",
-        "com.tcl.useragreement", "com.tcl.factory.view", "com.tcl.guard", "com.tcl.t_solo",
+        "com.tcl.useragreement", "com.tcl.factory.view", "com.tcl.t_solo",
         // TCL on Google TV (C825, Android 11): system server, Bluetooth remote and mic, keys, settings and quick menu,
         // keyboard, webview, Wi-Fi overlay, partner setup
         "com.tcl.system.server", "com.tcl.tcl_bt_rcu_service", "com.tcl.micmanager", "com.tcl.keyhelp",
