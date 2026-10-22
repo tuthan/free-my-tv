@@ -9,6 +9,11 @@ import android.view.accessibility.AccessibilityEvent;
  * system waits for it on every key (up to half a second), so it runs in a process of its own and does next to nothing.
  */
 public class RemoteKeyService extends AccessibilityService {
+    @Override protected void onServiceConnected() {
+        super.onServiceConnected();
+        AppLog.w("remote keys: service connected");
+    }
+
     @Override protected boolean onKeyEvent(KeyEvent event) {
         return RemoteKeys.onKey(this, event);
     }

@@ -360,7 +360,14 @@ final class HomeMode {
             }
             others.add(one);
         }
-        if (on == current.contains(REMOTE_SERVICE)) return;
+        if (on == current.contains(REMOTE_SERVICE)) {
+            // Some TCL builds reset the switch and keep the list: listed, but not running.
+            if (on && !"1".equals(adb.shell("settings get secure accessibility_enabled").trim())) {
+                adb.shell("settings put secure accessibility_enabled 1");
+                AppLog.w("remote buttons service: accessibility was off, turned it on");
+            }
+            return;
+        }
         List<String> list = new ArrayList<>(others);
         if (on) {
             JSONObject s = state(c);
