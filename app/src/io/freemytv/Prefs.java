@@ -121,6 +121,13 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
+    /** The screensaver: "standard" (the photos, or the big clock without them) or "terminal" (TerminalLook). */
+    static String look() {
+        return "terminal".equals(sp().getString("look", "standard")) ? "terminal" : "standard";
+    }
+
+    static void setLook(String v) { put("look", v); }
+
     // MARK: - City
 
     static String city() { return sp().getString("city", Config.CITY).trim(); }

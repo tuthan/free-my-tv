@@ -58,11 +58,20 @@ public class SettingsActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         view.resume();
-        // From ADB: am start -n io.freemytv/.SettingsActivity --ez screensaver true (straight to the preview).
+        // From ADB: am start -n io.freemytv/.SettingsActivity --ez screensaver true (straight to the preview), and for
+        // tests --es look terminal (that look, whatever Settings says) --ei ttfx_cycle_s 3 (a new effect every 3 s).
         if (preview == null && getIntent().getBooleanExtra("screensaver", false)) {
-            getIntent().removeExtra("screensaver");
+            Intent i = getIntent();
+            String look = i.getStringExtra("look");
+            long cycleMs = i.getIntExtra("ttfx_cycle_s", 0) * 1000L;
+            i.removeExtra("screensaver");
             view.pause();
             showPreview();
+            if (look != null || cycleMs > 0) {
+                preview.stop();
+                preview.setLook(look, cycleMs);
+                preview.start();
+            }
         }
     }
 
@@ -136,6 +145,7 @@ public class SettingsActivity extends Activity {
         private final RectF tmp = new RectF(), rowRect = new RectF(), focusBox = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
+        private final boolean ttfx;     // the Terminal screensaver is in this build (native/build.sh)
         private int screen = MAIN, focus;
         private boolean running, okDown, backDown, wasBusy;
         private StaticLayout errorLayout;   // the last error, wrapped (rebuilt only when it changes)
@@ -172,6 +182,7 @@ public class SettingsActivity extends Activity {
         SettingsView(SettingsActivity a) {
             super(a);
             activity = a;
+            ttfx = TtfxProcess.available(a);
             for (int i = 0; i < pop.length; i++) pop[i] = new Spring(0.28f, 0.85f, 0);
             HomeData.Weather wx = HomeData.get(a).weather;
             Shaders.sky(scene.palette, System.currentTimeMillis(), wx.sunrise, wx.sunset);
@@ -622,7 +633,7 @@ public class SettingsActivity extends Activity {
                     } else {
                         if (backDown && !e.isCanceled()) {
                             if (screen == PICKER && pickFor == PICK_CITY) {
-                                focus = CITY_ROW;
+                                focus = place(CITY_ROW);
                                 screen = HOME_SETTINGS;
                             } else if (screen == PICKER) {
                                 focus = pickFor - 1;
@@ -645,8 +656,22 @@ public class SettingsActivity extends Activity {
         // MARK: - Home Settings and Remote Buttons
 
         private static final String[] LANGUAGES = {"auto", "pt", "en", "es", "de", "ru"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
-        /** Home Settings: language, temperature, theme, sounds, weather, city, quotes, then one row per coin. */
-        private static final int CITY_ROW = 5, COIN_ROWS = 7;
+        /**
+         * Home Settings: language, temperature, theme, screensaver, sounds, weather, city, quotes, then one row per
+         * coin. Rows are numbered as here; a build without ttfx has no screensaver row, and row() and place() map the
+         * focus.
+         */
+        private static final int LOOK_ROW = 3, CITY_ROW = 6, COIN_ROWS = 8;
+
+        /** The Home Settings row (as numbered above) at this place in the list. */
+        private int row(int at) {
+            return ttfx || at < LOOK_ROW ? at : at + 1;
+        }
+
+        /** Where a Home Settings row is in the list. */
+        private int place(int row) {
+            return ttfx || row < LOOK_ROW ? row : row - 1;
+        }
 
         private boolean dollar() {
             return "BRL".equalsIgnoreCase(Config.CURRENCY.trim());
@@ -657,6 +682,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Idioma", "Language"));
             l.add(Ui.tr("Temperatura", "Temperature"));
             l.add(Ui.tr("Tema", "Theme"));
+            if (ttfx) l.add(Ui.tr("Tela de Descanso", "Screensaver"));
             l.add(Ui.tr("Sons de navegação", "Navigation sounds"));
             l.add(Ui.tr("Widget do clima", "Weather widget"));
             l.add(Ui.tr("Cidade", "City"));
@@ -669,8 +695,8 @@ public class SettingsActivity extends Activity {
         }
 
         private String[] settingValues() {
-            String[] labels = settingLabels();
-            String[] v = new String[labels.length];
+            // Every row as numbered, LOOK_ROW included; a build without ttfx drops it at the end.
+            String[] v = new String[settingLabels().length + (ttfx ? 0 : 1)];
             String lang = Prefs.language();
             v[0] = lang.equals("pt") ? "Português" : lang.equals("en") ? "English" : lang.equals("es") ? "Español"
                     : lang.equals("de") ? "Deutsch" : lang.equals("ru") ? "Русский" : Ui.tr("Automático", "Automatic");
@@ -678,13 +704,21 @@ public class SettingsActivity extends Activity {
             v[1] = unit.equals("C") ? "°C" : unit.equals("F") ? "°F" : Ui.tr("Automática", "Automatic");
             String theme = Prefs.theme();
             v[2] = theme.equals("light") ? Ui.tr("Claro", "Light") : theme.equals("dark") ? Ui.tr("Escuro", "Dark") : Ui.tr("Automático", "Automatic");
-            v[3] = onOff(Prefs.sounds());
-            v[4] = onOff(Prefs.weather());
+            v[LOOK_ROW] = terminal() ? "Terminal" : Ui.tr("Fotos e relógio", "Photos and clock");
+            v[4] = onOff(Prefs.sounds());
+            v[5] = onOff(Prefs.weather());
             v[CITY_ROW] = !cityStatus.isEmpty() ? cityStatus : Prefs.city().isEmpty() ? "—" : Prefs.city();
-            v[6] = onOff(Prefs.quotes());
+            v[7] = onOff(Prefs.quotes());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
             for (int i = COIN_ROWS; i < v.length; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - COIN_ROWS));
-            return v;
+            if (ttfx) return v;
+            List<String> shown = new ArrayList<>(java.util.Arrays.asList(v));
+            shown.remove(LOOK_ROW);
+            return shown.toArray(new String[0]);
+        }
+
+        private boolean terminal() {
+            return ttfx && "terminal".equals(Prefs.look());
         }
 
         private static String onOff(boolean on) {
@@ -747,7 +781,8 @@ public class SettingsActivity extends Activity {
                 Prefs.setKeyApp(Prefs.KEYS[focus], appPkgs.get(next));
                 return;
             }
-            switch (focus) {
+            int row = row(focus);
+            switch (row) {
                 case 0: {
                     int at = java.util.Arrays.asList(LANGUAGES).indexOf(Prefs.language());
                     Prefs.setLanguage(LANGUAGES[(at + dir + LANGUAGES.length) % LANGUAGES.length]);
@@ -763,13 +798,16 @@ public class SettingsActivity extends Activity {
                     Prefs.setTheme(THEMES[(at + dir + THEMES.length) % THEMES.length]);
                     break;
                 }
-                case 3: Prefs.setSounds(!Prefs.sounds()); break;
-                case 4: Prefs.setWeather(!Prefs.weather()); break;
+                case LOOK_ROW:
+                    Prefs.setLook(terminal() ? "standard" : "terminal");
+                    return;
+                case 4: Prefs.setSounds(!Prefs.sounds()); break;
+                case 5: Prefs.setWeather(!Prefs.weather()); break;
                 case CITY_ROW: return;
-                case 6: Prefs.setQuotes(!Prefs.quotes()); break;
+                case 7: Prefs.setQuotes(!Prefs.quotes()); break;
                 default:
                     if (!Prefs.quotes()) return;
-                    Prefs.setCoin(focus - COIN_ROWS, !Prefs.coin(focus - COIN_ROWS));
+                    Prefs.setCoin(row - COIN_ROWS, !Prefs.coin(row - COIN_ROWS));
                     break;
             }
             HomeData.get(getContext()).settingsChanged();
@@ -967,7 +1005,7 @@ public class SettingsActivity extends Activity {
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = !keys && i >= COIN_ROWS && !Prefs.quotes();
+                boolean locked = !keys && row(i) >= COIN_ROWS && !Prefs.quotes();
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -976,7 +1014,12 @@ public class SettingsActivity extends Activity {
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
-            c.drawText(Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value."), LIST_X * k + 30 * k, hy, hint);
+            // On the Screensaver row, the Terminal look's credit in its place (no room under eleven rows); the licences
+            // themselves are in the APK, assets/notices/ttfx.txt.
+            boolean credit = !keys && ttfx && row(focus) == LOOK_ROW;
+            String line = credit ? "Terminal: ttfx · TerminalTextEffects · MIT"
+                    : Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value.");
+            c.drawText(line, LIST_X * k + 30 * k, hy, hint);
             if (keys) {
                 c.drawText(RemoteKeys.VESTEL ? Ui.tr("YouTube, Prime Video e Google Play: a própria TV controla esses botões.",
                         "YouTube, Prime Video and Google Play: the TV itself controls those buttons.")
@@ -1007,7 +1050,7 @@ public class SettingsActivity extends Activity {
                 String[] city = cities.get(pickScroll + focus);
                 Prefs.setCity(city[1], city[2], city[3]);
                 HomeData.get(c).settingsChanged();
-                focus = CITY_ROW;
+                focus = place(CITY_ROW);
                 screen = HOME_SETTINGS;
             } else if (screen == PICKER) {
                 int at = pickScroll + focus;
@@ -1020,7 +1063,7 @@ public class SettingsActivity extends Activity {
                 return;
             } else if (screen == REMOTE_KEYS) {
                 openPicker(focus + 1);
-            } else if (screen == HOME_SETTINGS && focus == CITY_ROW) {
+            } else if (screen == HOME_SETTINGS && row(focus) == CITY_ROW) {
                 askCity();
                 return;
             } else if (screen == HOME_SETTINGS) {

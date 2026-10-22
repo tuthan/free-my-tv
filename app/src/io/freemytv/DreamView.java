@@ -38,6 +38,8 @@ import java.util.concurrent.Executors;
  *  - bottom left, the photo's caption: the time-of-day label ("TONIGHT"), the title, and genre · runtime · service.
  * Dark scrims only where there is text, stronger where the photo is bright. Any key exits (as on Apple TV).
  * Without photos (no TMDB key, or before the first fetch): the big clock over the night aurora, wandering slowly.
+ * The Terminal look (Settings, Home Settings, Screensaver) replaces all of it with TerminalLook, and falls back to the
+ * big clock if that fails.
  */
 final class DreamView extends View implements Choreographer.FrameCallback, HomeData.Listener, Recs.Listener {
     private static final long SHOW_MS = 30_000, FADE_MS = 3_000, FIRST_MS = 1_600;
@@ -139,6 +141,9 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private double driftPhase;      // where on the path this dream started
     private float k = 1;
     private long minute = -1;
+    private TerminalLook terminal;  // the Terminal look, while it runs
+    private String look;            // null: the one in Settings (the preview can ask for another)
+    private long cycleMs;           // the Terminal look's new effect every minute; shorter only for tests
     private String clock = "", date = "";
     private Paint datePaint, clockPaint, weatherPaint, weatherDim, quotePaint, stalePaint;
     private Paint cornerDate, cornerQuote, cornerStale, cornerClock, labelPaint, metaPaint;
@@ -178,6 +183,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         chrome.setHasOverlappingRendering(false);
     }
 
+    /** For the preview from ADB: this look instead of the one in Settings, a new effect every cycleMs (0: a minute). */
+    void setLook(String look, long cycleMs) {
+        this.look = look;
+        this.cycleMs = cycleMs;
+    }
+
     void start() {
         if (running) return;
         running = true;
@@ -187,6 +198,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         lastFrame = 0;
         failed.clear();
         fallback = recs.showcase().isEmpty();
+        if ("terminal".equals(look != null ? look : Prefs.look()) && TtfxProcess.available(getContext())) {
+            terminal = new TerminalLook(getContext(), cycleMs);
+            if (w > 0) terminal.setSize(w, h);
+            terminal.start();
+            fallback = true;    // no photos with it: if it fails, the big clock
+        }
         data.addListener(this);
         recs.addListener(this);
         data.refreshIfStale();
@@ -205,6 +222,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         decoding = false;
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
+        if (terminal != null) terminal.stop();     // and its child with it
+        terminal = null;
         data.removeListener(this);
         recs.removeListener(this);
         // The photos stay in GPU memory until the garbage collector runs: release them now (after the last frame).
@@ -241,6 +260,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         h = height;
         k = w / 1920f;
         scene.setSize(w, h);
+        if (terminal != null) terminal.setSize(w, h);
         content.setPosition(0, 0, w, h);
         chrome.setPosition(0, 0, w, h);
         // Without photos (the clock over the aurora).
@@ -278,7 +298,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     /** Loads the next photo in the background (one at a time); once ready, it comes in at the right moment. */
     private void prepareNext() {
-        if (!running || decoding || prepared != null) return;
+        if (!running || decoding || prepared != null || terminal != null) return;
         List<Recs.Pick> list = recs.showcase();
         if (list.isEmpty()) return;
         Slide last = incoming != null ? incoming : current;
@@ -439,6 +459,14 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             date = Ui.date(now);
             dirty = true;
             chromeDirty = true;
+        }
+        if (terminal != null && !terminal.failed()) {
+            // Black, as a terminal; the grid drifts with the other looks' path and dims after ten minutes like them.
+            canvas.drawRect(0, 0, w, h, black);
+            drift(up);
+            float dim = 1 - (1 - CHROME_DIM) * fadeIn(up - startedAt - DIM_AFTER_MS, DIM_MS);
+            terminal.draw(canvas, now, driftX, driftY, dim);
+            return;
         }
         if (running) advance(up);
         if (!glassFor.equals(clock)) buildGlass(clock);

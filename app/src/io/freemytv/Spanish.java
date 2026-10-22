@@ -39,6 +39,7 @@ final class Spanish {
             case " of 2": return " de 2";
             case "Your TV's home screen and screensaver": return "Pantalla de inicio y protector de pantalla del TV";
             case "Home Screen": return "Pantalla de inicio";
+            case "Photos and clock": return "Fotos y reloj";
             case "Screensaver": return "Protector de pantalla";
             case "Preview": return "Ver ahora";
             case "On the TV: tick “Always allow” and press OK.": return "En el TV: marca “Permitir siempre” y presiona OK.";
