@@ -100,9 +100,18 @@ final class HomeMode {
     static final String[] ASSISTANT = {"com.google.android.katniss", "com.android.hotwordenrollment.okgoogle",
         "com.tcl.smartalexa", "com.tcl.assistant"};                                   // TCL: Alexa, TCL's voice assistant
 
+    /**
+     * TCL's screen-content recognition, only with disable_acr=true in config.properties (never the default); protected
+     * otherwise. com.tcl.ttvs also carries TCL BI, T-Cast, TCL's own updater and the vendor key receiver.
+     */
+    static final String[] ACR = {
+        // Samba ACR, TCL BI, T-Cast, vendor keys. Runs as uid 1000; Wi-Fi owner check 2026-10-22: no network created by it
+        "com.tcl.ttvs",
+    };
+
     /** Never turned off, not even by mistake (picture, sound, inputs, remote, store). Checked before every disable. */
     private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList(
-        "com.tcl.ttvs", "com.tvos", "com.tcl.systemserver", "com.tcl.systemui.plugin", "com.tcl.tv", "com.tcl.tvinput",
+        "com.tvos", "com.tcl.systemserver", "com.tcl.systemui.plugin", "com.tcl.tv", "com.tcl.tvinput",
         "com.tcl.hearaid", "com.dolby.android.audio.service", "com.tcl.globalkeyoverlay", "com.tcl.autopair",
         "com.tcl.UpdatePeripheral", "com.tcl.suspension", "com.tcl.providers.config",
         "com.tcl.gamebar", "com.tcl.airplay2", "com.mirakulo.astrotv.service", "com.tcl.initsetup",
@@ -153,6 +162,9 @@ final class HomeMode {
         "com.fengmi.testsuite", "android.autoinstalls.config.fomovie",
         "uk.co.freeview.tifbridge",
         "uk.co.freeview.mdsclient", "uk.co.freeview.fvpconfigauth"));
+    static {
+        if (!Config.DISABLE_ACR) PROTECTED.addAll(Arrays.asList(ACR));
+    }
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
     private static final Object RUN = new Object();
@@ -517,7 +529,8 @@ final class HomeMode {
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
             for (String pkg : targets(home, originalDream(s), true)) {
-                if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
+                if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)
+                        && !Arrays.asList(ACR).contains(pkg)) toEnable.add(pkg);
             }
             toEnable.removeAll(stringList(s, "keptOff"));
             Set<String> present = packages(adb, "");
@@ -757,6 +770,7 @@ final class HomeMode {
         if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
         out.addAll(Arrays.asList(DEBLOAT));
         if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
+        if (Config.DISABLE_ACR) out.addAll(Arrays.asList(ACR));
         return out;
     }
 

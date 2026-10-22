@@ -141,6 +141,9 @@ Then, in the code:
 - `HomeMode.DEBLOAT`: add the brand's promo, demo, store-mode and telemetry apps, one comment per line. Only those.
 - `HomeMode.PROTECTED`: add the brand's system pieces: picture, sound, inputs and HDMI-CEC, the tuner and live TV,
   remote and Bluetooth pairing, setup, updates, system UI. When in doubt, protect it.
+- `HomeMode.ACR`: TCL's `com.tcl.ttvs` (Samba ACR, TCL BI, T-Cast, the vendor key receiver), turned off only with
+  `disable_acr=true` (default false) and protected otherwise; it runs as the shared system uid, so it went on the list
+  only after a Wi-Fi-owner check by hand (no saved network created by it).
 - `HomeApps.SHELF`, `LIVE_TV_APPS` and `HIDDEN`: the shelf apps, the brand's live TV app, apps to hide from All Apps.
 - Build, install, have them switch on the TV, read `adb logcat -s FreeMyTV`, then have them switch back to
   *Original* once and confirm everything returned.
