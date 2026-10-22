@@ -362,7 +362,7 @@ public class SettingsActivity extends Activity {
 
             // On the left: big symbol, title, description.
             float cx = 500 * k;
-            Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, 0xEBFFFFFF);
+            Symbols.draw(getContext(), c, "mark", cx, 400 * k, 150 * k, 0xEBFFFFFF);
             c.drawText("Free My TV", cx, 612 * k, title);
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);

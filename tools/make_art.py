@@ -1,4 +1,4 @@
-"""Draws the app icon, the TV banner and the site's images (Pillow). Usage: python3 tools/make_art.py"""
+"""Draws the app icon, the TV banner and the settings symbol (Pillow). Usage: python3 tools/make_art.py"""
 import math
 import os
 
@@ -6,7 +6,8 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.path.join(ROOT, "app/assets/fonts/InterVariable.ttf")
-STOPS = [(0.0, (255, 194, 122)), (0.5, (255, 122, 158)), (1.0, (154, 140, 255))]   # sunrise -> pink -> dusk
+NAME = "Free My TV"
+STOPS = [(0.0, (110, 231, 183)), (0.5, (20, 184, 166)), (1.0, (14, 98, 148))]   # mint -> jade -> deep sea
 
 
 def gradient(w, h, angle=35):
@@ -30,7 +31,16 @@ def gradient(w, h, angle=35):
     return img
 
 
-def sparkle(draw, cx, cy, r, fill):
+def glow(w, h, cx, cy, r, alpha):
+    """A soft white light (a blurred disc)."""
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).ellipse((cx - r, cy - r, cx + r, cy + r), fill=round(255 * alpha))
+    out = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+    out.putalpha(mask.filter(ImageFilter.GaussianBlur(r * 0.6)))
+    return out
+
+
+def sparkle(draw, cx, cy, r, fill=255):
     """Four-point star."""
     pts = []
     for i in range(8):
@@ -40,31 +50,41 @@ def sparkle(draw, cx, cy, r, fill):
     draw.polygon(pts, fill=fill)
 
 
-def mark(size, bg=True):
-    """The mark: a TV with a sparkle, on the gradient squircle (bg) or alone (white)."""
-    s = size * 4
-    img = gradient(s, s).convert("RGBA") if bg else Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    if bg:
-        mask = Image.new("L", (s, s), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, s - 1, s - 1), radius=int(s * 0.23), fill=255)
-        img.putalpha(mask)
-    layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    white = (255, 255, 255, 255)
+def glyph(s):
+    """The mark as a mask: a TV with a sparkle."""
+    m = Image.new("L", (s, s), 0)
+    d = ImageDraw.Draw(m)
     # screen
-    x0, y0, x1, y1 = s * 0.2, s * 0.27, s * 0.8, s * 0.66
-    d.rounded_rectangle((x0, y0, x1, y1), radius=int(s * 0.07), outline=white, width=int(s * 0.055))
+    d.rounded_rectangle((s * 0.2, s * 0.27, s * 0.8, s * 0.66), radius=int(s * 0.07), outline=255, width=int(s * 0.055))
     # stand
-    d.rounded_rectangle((s * 0.36, s * 0.715, s * 0.64, s * 0.765), radius=int(s * 0.025), fill=white)
+    d.rounded_rectangle((s * 0.36, s * 0.715, s * 0.64, s * 0.765), radius=int(s * 0.025), fill=255)
     # sparkle inside the screen
-    sparkle(d, s * 0.5, s * 0.465, s * 0.12, white)
-    sparkle(d, s * 0.655, s * 0.355, s * 0.045, white)
-    if bg:
-        shadow = layer.copy().filter(ImageFilter.GaussianBlur(s * 0.02))
-        tint = Image.new("RGBA", (s, s), (120, 40, 80, 0))
-        tint.putalpha(shadow.getchannel("A").point(lambda v: int(v * 0.22)))
-        img.alpha_composite(tint, (0, int(s * 0.012)))
-    img.alpha_composite(layer)
+    sparkle(d, s * 0.5, s * 0.465, s * 0.12)
+    sparkle(d, s * 0.655, s * 0.355, s * 0.045)
+    return m
+
+
+def white(alpha):
+    img = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
+    img.putalpha(alpha)
+    return img
+
+
+def mark(size, bg=True):
+    """The mark on the gradient squircle (bg) or alone (white)."""
+    s = size * 4
+    alpha = glyph(s)
+    if not bg:
+        return white(alpha).resize((size, size), Image.LANCZOS)
+    img = gradient(s, s).convert("RGBA")
+    img.alpha_composite(glow(s, s, s * 0.22, s * 0.12, s * 0.55, 0.28))
+    shadow = Image.new("RGBA", (s, s), STOPS[-1][1] + (0,))
+    shadow.putalpha(alpha.filter(ImageFilter.GaussianBlur(s * 0.022)).point(lambda v: int(v * 0.35)))
+    img.alpha_composite(shadow, (0, int(s * 0.016)))
+    img.alpha_composite(white(alpha))
+    mask = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, s - 1, s - 1), radius=int(s * 0.23), fill=255)
+    img.putalpha(mask)
     return img.resize((size, size), Image.LANCZOS)
 
 
@@ -84,19 +104,33 @@ def font(px, weight=600):
 
 def banner(w=640, h=360):
     s = 4
-    img = gradient(w * s, h * s, angle=20).convert("RGBA")
-    m = mark(int(h * 0.5 * s), bg=False)
+    W, H = w * s, h * s
+    img = gradient(W, H, angle=20).convert("RGBA")
+    img.alpha_composite(glow(W, H, W * 0.18, H * 0.05, H * 0.9, 0.22))
+    m = mark(int(h * 0.52 * s), bg=False)
     d = ImageDraw.Draw(img)
     f = font(int(h * 0.15 * s), 650)
-    text = "Free My TV"
-    box = d.textbbox((0, 0), text, font=f)
-    gap = int(w * 0.02 * s)
-    total = m.width + gap + (box[2] - box[0])
-    x = (w * s - total) // 2
-    img.alpha_composite(m, (x, int((h * s - m.height) / 2)))
-    y = (h * s - (box[3] - box[1])) // 2 - box[1]
-    d.text((x + m.width + gap - box[0], y), text, font=f, fill=(255, 255, 255, 255))
+    box = d.textbbox((0, 0), NAME, font=f)
+    gap = int(w * 0.015 * s)
+    x = (W - (m.width + gap + box[2] - box[0])) // 2
+    my = (H - m.height) // 2
+    tx, ty = x + m.width + gap - box[0], (H - (box[3] - box[1])) // 2 - box[1]
+    # one soft shadow under the mark and the name
+    sh = Image.new("L", (W, H), 0)
+    sh.paste(m.getchannel("A"), (x, my))
+    ImageDraw.Draw(sh).text((tx, ty), NAME, font=f, fill=255)
+    shadow = Image.new("RGBA", (W, H), STOPS[-1][1] + (0,))
+    shadow.putalpha(sh.filter(ImageFilter.GaussianBlur(H * 0.02)).point(lambda v: int(v * 0.3)))
+    img.alpha_composite(shadow, (0, int(H * 0.01)))
+    img.alpha_composite(m, (x, my))
+    d.text((tx, ty), NAME, font=f, fill=(255, 255, 255, 255))
     return img.resize((w, h), Image.LANCZOS)
+
+
+def symbol(size=240):
+    """The mark alone, cropped, for Symbols (the settings page and the settings tile on the shelf)."""
+    m = mark(size, bg=False)
+    return m.crop(m.getchannel("A").getbbox())
 
 
 if __name__ == "__main__":
@@ -104,9 +138,5 @@ if __name__ == "__main__":
     os.makedirs(res, exist_ok=True)
     mark(192).save(os.path.join(res, "icon.png"))
     banner().save(os.path.join(res, "banner.png"))
-    site = os.path.join(ROOT, "docs/assets")
-    os.makedirs(site, exist_ok=True)
-    mark(512).save(os.path.join(site, "icon-512.png"))
-    mark(180).save(os.path.join(site, "apple-touch-icon.png"))
-    mark(64).save(os.path.join(site, "favicon-64.png"))
+    symbol().save(os.path.join(ROOT, "app/assets/symbols/mark.png"))
     print("ok")
