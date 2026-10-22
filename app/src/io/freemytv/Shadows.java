@@ -14,7 +14,7 @@ import java.util.HashMap;
  * time the shape changes size (every frame of a focus animation): on a Mali-450 (Mi Box 3, Android 9) that alone took
  * ~40 ms a frame. Here each (corner radius, blur) is blurred once into a small alpha bitmap and drawn as a nine-slice
  * (corners as they are, edges and center stretched), tinted with the paint's color.
- * Android 12+ keeps drawing the real BlurMaskFilter.
+ * Only with Ui.LIGHT; other Android 12+ TVs keep drawing the real BlurMaskFilter.
  */
 final class Shadows {
     private final HashMap<Long, Bitmap> cache = new HashMap<>();
@@ -26,7 +26,7 @@ final class Shadows {
 
     /** Draws `shape` (radius `r`) with `paint`, whose BlurMaskFilter was made with radius `blur`. */
     void draw(Canvas c, RectF shape, float r, float blur, Paint paint) {
-        if (!Ui.LEGACY) {
+        if (!Ui.LIGHT) {
             c.drawRoundRect(shape, r, r, paint);
             return;
         }

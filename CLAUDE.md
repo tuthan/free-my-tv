@@ -159,6 +159,8 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   Android 9 has no RenderNode (`Recording` wraps it, with a Picture there) and no `cmd role`. On Android 9 to 11
   (`Ui.LEGACY`) the home screen skips the GPU layers, draws blurred shadows from cached bitmaps (`Shadows`) and
   rounds images with a shader instead of clipPath: their GPUs (a Mi Box 3's Mali-450) choked on those.
+  That cheap drawing is `Ui.LIGHT`, which is `LEGACY` plus TCL on Android 12+ (a G09 with a Mali-G57 spent 12 ms a
+  frame re-rendering the shelf's layer); gate drawing cost on `LIGHT` and keep `LEGACY` for what older Android lacks.
   Android 11 runs the screensaver as `ScreensaverAlone`, in the main process (its DreamActivity needs the dream in the
   app's default process, without a home activity); `res/values-v30/bools.xml` picks it, every other version keeps
   `Screensaver` in `:home`. Keep both in step.

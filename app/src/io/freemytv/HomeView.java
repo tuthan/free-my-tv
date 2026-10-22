@@ -369,8 +369,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Hardware layers on the GPU: only the one that changed is redrawn; moving, fading and scaling stay cheap.
         // Not on Android 9 to 11: on older GPUs (a Mi Box 3's Mali-450) redrawing and compositing a big layer on every
         // frame cost more than drawing straight to the screen (measured: focus on the picks 33 → 12 ms a frame, the
-        // drawer 19 → 17 ms).
-        for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
+        // drawer 19 → 17 ms). Nor on TCL (Ui.LIGHT).
+        for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer}) v.setLayerType(Ui.LIGHT ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
         for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer}) {
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
             addView(v);
@@ -1323,12 +1323,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * `image` stretched over `cell`, with corners of radius `r`. Android 12+ clips to the rounded shape; on Android 9 to
-     * 11 that anti-aliased clip costs the GPU a mask on every frame of a focus animation (measured on a Mi Box 3: most of
+     * `image` stretched over `cell`, with corners of radius `r`. Android 12+ clips to the rounded shape; with Ui.LIGHT
+     * that anti-aliased clip costs the GPU a mask on every frame of a focus animation (measured on a Mi Box 3: most of
      * a 49 ms frame), so there the image is the shader of a rounded rectangle instead, which looks the same.
      */
     private void roundImage(Canvas c, Bitmap image, RectF cell, float r) {
-        if (!Ui.LEGACY) {
+        if (!Ui.LIGHT) {
             clip.reset();
             clip.addRoundRect(cell, r, r, Path.Direction.CW);
             c.save();
@@ -1553,7 +1553,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Weather for your location: now (large), the next 6 hours, and sunrise and sunset. */
     private void drawWeatherCard(Canvas c, RectF r) {
         drawerCard(c, r);
-        if (Ui.LEGACY) weatherSnapshot.draw(c, r, drawerCardsKey(), cc -> drawWeather(cc, r));
+        if (Ui.LIGHT) weatherSnapshot.draw(c, r, drawerCardsKey(), cc -> drawWeather(cc, r));
         else drawWeather(c, r);
     }
 
@@ -1631,7 +1631,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Prices in the configured currency with the 24 h change (green/red, like Apple's Stocks app). */
     private void drawQuotesCard(Canvas c, RectF r) {
         drawerCard(c, r);
-        if (Ui.LEGACY) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
+        if (Ui.LIGHT) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
         else drawPrices(c, r);
     }
 
@@ -1645,8 +1645,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * Android 9 to 11: a drawer card's content (its text and symbols, not its glass) kept as a bitmap. The drawer is
-     * redrawn on every frame of its focus animation, and laying that text out again took ~15 ms a frame on a Mi Box 3.
+     * Ui.LIGHT (no layers): a drawer card's content (its text and symbols, not its glass) kept as a bitmap. The drawer
+     * is redrawn on every frame of its focus animation, and laying that text out again took ~15 ms a frame on a Mi Box 3.
      */
     private static final class Snapshot {
         private Bitmap bitmap;

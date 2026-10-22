@@ -25,8 +25,17 @@ import java.util.function.Supplier;
 final class Ui {
     private Ui() {}
 
-    /** Android 9 to 11: older TVs and boxes, whose GPUs need the cheaper drawing paths (Shadows, rounded images). */
+    /** Android 9 to 11: older TVs and boxes. */
     static final boolean LEGACY = Build.VERSION.SDK_INT < 31;
+    /**
+     * The cheap way to draw the home screen: no hardware layers, nine-slice shadows from cached bitmaps (Shadows)
+     * instead of a BlurMaskFilter, images rounded with a shader instead of an anti-aliased clipPath, drawer card text
+     * kept as a bitmap. It looks the same; it costs some CPU drawing and a few small bitmaps, and saves the GPU from
+     * re-rendering a whole layer (blurs, clip masks) on every frame of a focus move. Android 9 to 11, and TCL on 12+:
+     * on a TCL G09 (Mali-G57, UI at 1920x1080) re-rendering the shelf's layer took 12 of a 13 ms GPU flush a frame,
+     * and 78 of 120 frames missed 16.7 ms. Other 1080p Mali-G5x sets likely want it too.
+     */
+    static final boolean LIGHT = LEGACY || RemoteKeys.TCL;
     static final Locale RU = new Locale("ru", "RU");
     static final Locale PT = new Locale("pt", "BR");
     /** English, Portuguese, Spanish, German or Russian, from the settings or, with "auto", the TV's own language. */
