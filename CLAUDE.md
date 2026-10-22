@@ -26,6 +26,7 @@ before you do it, and let them do the taps on the TV.
 4. **The TMDB key is theirs and secret.** Ask them to create one (free: themoviedb.org → Settings → API) and paste it
    after `tmdb_key=` in `config.properties` themselves. Don't ask for it in the chat, never print it, never commit
    it. If they paste it in the chat anyway, put it only in `config.properties`.
+   A v4 read access token (starts with `eyJ`) works too: `Recs` sends it as `Authorization: Bearer`, which keeps the key out of URLs.
    Without a key everything works except the picks and the screensaver photos.
    The same goes for the optional `watchmode_key` (free, watchmode.com; makes picks open the title's page): theirs, secret, only in `config.properties`.
 5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
