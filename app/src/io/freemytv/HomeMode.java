@@ -477,6 +477,7 @@ final class HomeMode {
             done(c, null);
             adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             ModeJob.schedule(c, ModeJob.MEMORY, FREE, 120_000);
+            allowAutoStart(adb);
         } catch (Exception e) {
             done(c, Ui.tr("Não deu para ligar o Free My TV: ", "Couldn't turn on Free My TV: ") + (Ui.ru ? Russian.text(e.getMessage() == null ? "" : e.getMessage()) : e.getMessage()));
         }
@@ -649,6 +650,7 @@ final class HomeMode {
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
+                allowAutoStart(adb);
             } catch (Exception e) {
                 notice(app, Ui.tr("Não consegui conferir o Free My TV: ", "Couldn't check Free My TV: ") + (Ui.ru ? Russian.text(e.getMessage() == null ? "" : e.getMessage()) : e.getMessage()));
                 return;
@@ -659,6 +661,22 @@ final class HomeMode {
             } else if (updated) {
                 notice(app, Ui.tr("A TV foi atualizada; o Free My TV continua igual.", "The TV was updated; Free My TV is still on."));
             }
+        }
+    }
+
+    /**
+     * TCL's TclAppBoot won't bind our jobs or the remote keys service without APP_AUTO_START. App-ops are saved
+     * lazily and a reboot soon after the set loses it, so it is written out at once, and every check sets it again.
+     */
+    private static void allowAutoStart(Adb adb) {
+        if (!RemoteKeys.TCL) return;
+        try {
+            for (String cmd : new String[] {"appops set " + PKG + " APP_AUTO_START allow", "appops write-settings"}) {
+                String out = adb.shell(cmd);
+                if (out.contains("Error") || out.contains("Unknown")) AppLog.w(cmd + ": " + out.trim());
+            }
+        } catch (IOException e) {
+            AppLog.w("auto start: " + e.getMessage());
         }
     }
 
