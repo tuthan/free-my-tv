@@ -61,9 +61,7 @@ final class HomeMode {
     static final String[] DEBLOAT = {
         "com.google.android.play.games", "com.google.android.youtube.tvmusic",        // Play Games, YouTube Music
         // TCL
-        "com.tcl.magiconnectfree", "com.tcl.miracast",                                // MagiConnect (the phone remote), mirroring
-        "com.tcl.copydatatotv", "com.tcl.MultiScreenInteraction_TV",                  // phone-casting helpers
-        "com.tcl.notereminder",
+        "com.tcl.miracast",                                                           // screen mirroring
         "com.tcl.waterfall.overseas", "com.tcl.channelplus",                          // TCL Channel and its Live TV
         "com.tcl.messagebox", "com.tcl.usercenter",                                   // TCL messages and account
         "com.tcl.exhibit", "com.tcl.esticker", "com.tcl.hotelmenu",                   // store demo, hotel menu
@@ -121,6 +119,7 @@ final class HomeMode {
         "com.tcl.system.server", "com.tcl.tcl_bt_rcu_service", "com.tcl.micmanager", "com.tcl.keyhelp",
         "com.tcl.settings", "com.tcl.common.shortcutmenu", "com.tcl.inputmethod.international", "com.tcl.android.webview",
         "com.tcl.wifi.resources.overlay", "com.tcl.partnercustomizer", "com.tcl.tv.tclhome_passive",
+        "com.tcl.magiconnectfree",                                                    // MagiConnect: the phone remote
         "com.google.android.gms", "com.google.android.gsf", "com.android.vending", "com.google.android.apps.mediashell",
         "com.google.android.tv.remote.service", "com.google.android.inputmethod.latin", "com.google.android.webview",
         "com.android.tv.settings", "com.android.systemui", "android", PKG,
@@ -718,7 +717,7 @@ final class HomeMode {
     }
 
     /**
-     * Turned off by an older version, protected since: back on. After a reinstall only the record
+     * Turned off by an older version, protected since (TCL's MagiConnect): back on. After a reinstall only the record
      * in the TV's settings knows about it, so both lists count. One that won't come back stays in `disabled`, and so in
      * the record, for Original and the next check.
      */
