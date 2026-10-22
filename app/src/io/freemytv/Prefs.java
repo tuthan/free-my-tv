@@ -151,6 +151,10 @@ final class Prefs {
     static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
     static void setQuotes(boolean on) { put("quotes", on); }
 
+    /** The drawer's System card (CPU, memory, network): off until turned on in Home Settings. */
+    static boolean system() { return sp().getBoolean("system", false); }
+    static void setSystem(boolean on) { put("system", on); }
+
     static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
     static void setCoin(int i, boolean on) { put("coin" + i, on); }
 
