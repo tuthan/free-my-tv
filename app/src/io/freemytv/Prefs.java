@@ -83,6 +83,17 @@ final class Prefs {
         return app.getSharedPreferences("settings", Context.MODE_PRIVATE);
     }
 
+    /**
+     * Reads them again if another process changed them since this one first read them: on Android 11 the screensaver
+     * runs in the main process (ScreensaverAlone), and Settings writes from :home.
+     */
+    @SuppressWarnings("deprecation")
+    static void reload() {
+        if (app == null) return;
+        app.getSharedPreferences("settings", Context.MODE_MULTI_PROCESS);
+        version++;
+    }
+
     private static void put(String key, String value) {
         sp().edit().putString(key, value).apply();
         version++;
@@ -127,6 +138,23 @@ final class Prefs {
     }
 
     static void setLook(String v) { put("look", v); }
+
+    /** The Terminal look's choices: a new effect every 30 s, minute, 2 or 5 minutes. */
+    static final int[] EFFECT_EVERY = {30, 60, 120, 300};
+
+    /** Seconds between the Terminal look's effects (a minute unless changed). */
+    static int effectEvery() {
+        int v;
+        try {
+            v = Integer.parseInt(sp().getString("effect_every", "60"));
+        } catch (NumberFormatException e) {
+            v = 60;
+        }
+        for (int e : EFFECT_EVERY) if (e == v) return v;
+        return 60;
+    }
+
+    static void setEffectEvery(int seconds) { put("effect_every", Integer.toString(seconds)); }
 
     // MARK: - City
 

@@ -44,6 +44,15 @@ final class German {
             case "Photos and clock": return "Fotos und Uhr";
             case "Screensaver": return "Bildschirmschoner";
             case "Preview": return "Ansehen";
+            case "Look": return "Stil";
+            case "Start after": return "Starten nach";
+            case "Sleep after": return "Ruhezustand nach";
+            case "Never": return "Nie";
+            case "Couldn't read the power settings.": return "Die Energieeinstellungen ließen sich nicht lesen.";
+            case "Couldn't change the power settings.": return "Die Energieeinstellungen ließen sich nicht ändern.";
+            case "The TV didn't take that change.": return "Der Fernseher hat diese Änderung nicht übernommen.";
+            case "While plugged in, the screensaver doesn't start.": return "Am Netz startet der Bildschirmschoner nicht.";
+            case "OK previews it; in Terminal, → is the next effect.": return "OK zeigt ihn an; im Terminal ist → der nächste Effekt.";
             case "On the TV: tick “Always allow” and press OK.": return "Am Fernseher: „Immer zulassen“ ankreuzen und OK drücken.";
             case "RECOMMENDATIONS": return "EMPFEHLUNGEN";
             case "No TMDB key: see the README (config.properties).": return "Kein TMDB-Schlüssel: siehe README (config.properties).";

@@ -30,12 +30,15 @@ import android.widget.EditText;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Free My TV's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
@@ -127,7 +130,10 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5,
+                SCREENSAVER = 6;
+        /** The Screensaver page's rows (saverRows). */
+        private static final int S_LOOK = 0, S_START = 1, S_SLEEP = 2, S_PREVIEW = 3;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
@@ -151,6 +157,11 @@ public class SettingsActivity extends Activity {
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
         private final boolean ttfx;     // the Terminal screensaver is in this build (native/build.sh)
+        // The Screensaver page's timeouts (null until read), its line under the list, changes on their way.
+        private final ExecutorService work = Executors.newSingleThreadExecutor();
+        private Power.Timeouts timeouts;
+        private String powerLine = "";
+        private int powerChanges;
         private int screen = MAIN, focus;
         private boolean running, okDown, backDown, wasBusy;
         private StaticLayout errorLayout;   // the last error, wrapped (rebuilt only when it changes)
@@ -240,10 +251,10 @@ public class SettingsActivity extends Activity {
                     return name + (inUse ? Ui.tr(". Em uso", ". In use") : "") + ", " + (row + 1) + Ui.tr(" de 2", " of 2");
                 }
                 case HOME_SETTINGS:
-                case REMOTE_KEYS: {
-                    boolean keys = screen == REMOTE_KEYS;
-                    String[] labels = keys ? keyLabels() : settingLabels(), values = keys ? keyValues() : settingValues();
-                    return row < labels.length ? labels[row] + ", " + values[row] : "";
+                case REMOTE_KEYS:
+                case SCREENSAVER: {
+                    String[] labels = listLabels(), values = listValues();
+                    return row < labels.length ? labels[row] + (values[row].isEmpty() ? "" : ", " + values[row]) : "";
                 }
                 case PICKER: {
                     int at = pickScroll + row;
@@ -355,6 +366,7 @@ public class SettingsActivity extends Activity {
                 case MAIN: return 6;
                 case HOME_CHOICE: return 2;
                 case HOME_SETTINGS: return settingLabels().length;
+                case SCREENSAVER: return saverRows().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
                 case SHELF_EDIT: return Math.min(PICK_VISIBLE, shelfRows.size());
                 default: return Prefs.KEYS.length;
@@ -397,8 +409,8 @@ public class SettingsActivity extends Activity {
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"),
                     Ui.tr("Ajustes do Início", "Home Settings"), Ui.tr("Prateleira", "Shelf"),
                     Ui.tr("Botões do Controle", "Remote Buttons"), Ui.tr("Ajustes da TV", "TV Settings")};
-            // Screensaver: with ttfx, the look (← → change it, ‹ › while focused); OK previews it either way.
-            String look = !ttfx ? Ui.tr("Ver agora", "Preview") : focus == 1 ? "‹  " + lookName() + "  ›" : lookName();
+            // Screensaver: with ttfx, the look (← → change it, ‹ › while focused); OK opens its page either way.
+            String look = !ttfx ? "" : focus == 1 ? "‹  " + lookName() + "  ›" : lookName();
             String[] values = {working ? "" : mode, look, "", "", "", ""};
             for (int i = 0; i < 6; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
@@ -409,7 +421,7 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 2) {
+                if (i >= 2 || (i == 1 && !ttfx)) {
                     float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                     Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
                 } else if (i == 0 && working) {
@@ -625,9 +637,12 @@ public class SettingsActivity extends Activity {
                     } else if (down && (screen == HOME_SETTINGS || screen == REMOTE_KEYS)) {
                         adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
+                    } else if (down && screen == SCREENSAVER) {
+                        adjustSaver(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                        invalidate();
+                        spoken.focusMoved();
                     } else if (down && screen == MAIN && focus == 1 && ttfx) {
-                        // Two looks: ← and → alike.
-                        Prefs.setLook("terminal".equals(Prefs.look()) ? "standard" : "terminal");
+                        stepLook(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
                         spoken.focusMoved();
                     }
@@ -655,7 +670,8 @@ public class SettingsActivity extends Activity {
                                 focus = pickFor - 1;
                                 screen = REMOTE_KEYS;
                             } else {
-                                focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3 : screen == REMOTE_KEYS ? 4 : 0;
+                                focus = screen == SCREENSAVER ? 1 : screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3
+                                        : screen == REMOTE_KEYS ? 4 : 0;
                                 screen = MAIN;
                             }
                         }
@@ -716,9 +732,137 @@ public class SettingsActivity extends Activity {
             return v;
         }
 
-        /** The screensaver's look, as the Screensaver row shows it. */
+        /** The screensaver's look, as the Screensaver row shows it: Terminal with how often its effect changes. */
         private String lookName() {
-            return "terminal".equals(Prefs.look()) ? "Terminal" : Ui.tr("Fotos e relógio", "Photos and clock");
+            return "terminal".equals(Prefs.look()) ? "Terminal · " + Power.seconds(Prefs.effectEvery())
+                    : Ui.tr("Fotos e relógio", "Photos and clock");
+        }
+
+        /** The look's choices, in order: the photos, then Terminal at each of its intervals. */
+        private void stepLook(int dir) {
+            int n = Prefs.EFFECT_EVERY.length + 1, at = 0;
+            if ("terminal".equals(Prefs.look())) {
+                for (int i = 0; i < Prefs.EFFECT_EVERY.length; i++) if (Prefs.EFFECT_EVERY[i] == Prefs.effectEvery()) at = i + 1;
+            }
+            int next = (at + dir + n) % n;
+            if (next == 0) {
+                Prefs.setLook("standard");
+            } else {
+                Prefs.setLook("terminal");
+                Prefs.setEffectEvery(Prefs.EFFECT_EVERY[next - 1]);
+            }
+        }
+
+        // MARK: - Screensaver page: the look, when it starts, when the TV sleeps, the preview
+
+        private int[] saverRows() {
+            return ttfx ? new int[] {S_LOOK, S_START, S_SLEEP, S_PREVIEW} : new int[] {S_START, S_SLEEP, S_PREVIEW};
+        }
+
+        private String[] saverLabels() {
+            int[] rows = saverRows();
+            String[] l = new String[rows.length];
+            for (int i = 0; i < rows.length; i++) {
+                l[i] = rows[i] == S_LOOK ? Ui.tr("Visual", "Look") : rows[i] == S_START ? Ui.tr("Começar após", "Start after")
+                        : rows[i] == S_SLEEP ? Ui.tr("Dormir após", "Sleep after") : Ui.tr("Ver agora", "Preview");
+            }
+            return l;
+        }
+
+        private String[] saverValues() {
+            int[] rows = saverRows();
+            String[] v = new String[rows.length];
+            Power.Timeouts t = timeouts;
+            for (int i = 0; i < rows.length; i++) {
+                if (rows[i] == S_LOOK) v[i] = lookName();
+                else if (rows[i] == S_START) v[i] = t == null ? "—" : Power.seconds(t.screensaver);
+                else if (rows[i] == S_SLEEP) v[i] = t == null ? "—" : t.sleep < 0 ? Ui.tr("Nunca", "Never") : Power.seconds(t.sleep);
+                else v[i] = "";
+            }
+            return v;
+        }
+
+        /** The timeouts from the TV's ADB. */
+        private void refreshTimeouts() {
+            if (powerChanges > 0) return;
+            Context app = getContext().getApplicationContext();
+            work.execute(() -> {
+                Power.Timeouts read;
+                try {
+                    read = Power.timeouts(app);
+                } catch (IOException e) {
+                    AppLog.w("power: " + e.getMessage());
+                    read = null;
+                }
+                Power.Timeouts got = read;
+                handler.post(() -> {
+                    if (powerChanges > 0) return;
+                    if (got != null) timeouts = got;
+                    else powerLine = Ui.tr("Não deu para ler os ajustes de energia.", "Couldn't read the power settings.");
+                    invalidate();
+                });
+            });
+        }
+
+        /** The focused row one step on: the look is ours; the timeouts are set through the TV's ADB and read back. */
+        private void adjustSaver(int dir) {
+            int row = saverRows()[focus];
+            if (row == S_PREVIEW) return;
+            if (row == S_LOOK) {
+                stepLook(dir);
+                return;
+            }
+            Power.Timeouts t = timeouts;
+            if (t == null || powerChanges >= 3) return;   // a held arrow doesn't queue a long run of changes
+            int want;
+            if (row == S_START) {
+                t.screensaver = nextValue(Power.SCREENSAVER, t.screensaver, dir);
+                want = t.screensaver;
+            } else {
+                t.sleep = nextValue(Power.SLEEP, t.sleep, dir);
+                want = t.sleep;
+            }
+            powerChanges++;
+            powerLine = "";
+            Context app = getContext().getApplicationContext();
+            work.execute(() -> {
+                Power.Timeouts now;
+                try {
+                    now = row == S_START ? Power.setScreensaver(app, want) : Power.setSleep(app, want);
+                } catch (IOException e) {
+                    AppLog.w("power: " + e.getMessage());
+                    now = null;
+                }
+                Power.Timeouts got = now;
+                handler.post(() -> {
+                    if (--powerChanges > 0) return;
+                    if (got == null) {
+                        powerLine = Ui.tr("Não deu para mudar os ajustes de energia.", "Couldn't change the power settings.");
+                    } else {
+                        timeouts = got;
+                        if ((row == S_START ? got.screensaver : got.sleep) != want) {
+                            powerLine = Ui.tr("A TV não aceitou essa mudança.", "The TV didn't take that change.");
+                        }
+                    }
+                    invalidate();
+                });
+            });
+        }
+
+        /** The value after `now` in `values` (before it, dir < 0), wrapping; the first or last if it isn't one of them. */
+        private static int nextValue(int[] values, int now, int dir) {
+            int at = -1;
+            for (int i = 0; i < values.length; i++) if (values[i] == now) at = i;
+            return values[at < 0 ? (dir > 0 ? 0 : values.length - 1) : (at + dir + values.length) % values.length];
+        }
+
+        /** The rows of the list screens: Home Settings, Remote Buttons, Screensaver. */
+        private String[] listLabels() {
+            return screen == REMOTE_KEYS ? keyLabels() : screen == SCREENSAVER ? saverLabels() : settingLabels();
+        }
+
+        private String[] listValues() {
+            return screen == REMOTE_KEYS ? keyValues() : screen == SCREENSAVER ? saverValues() : settingValues();
         }
 
         private static String onOff(boolean on) {
@@ -991,18 +1135,18 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawList(Canvas c) {
-            boolean keys = screen == REMOTE_KEYS;
-            String[] labels = keys ? keyLabels() : settingLabels();
-            String[] values = keys ? keyValues() : settingValues();
+            boolean keys = screen == REMOTE_KEYS, saver = screen == SCREENSAVER;
+            String[] labels = listLabels();
+            String[] values = listValues();
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : Ui.tr("Ajustes do Início", "Home Settings"),
-                    LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : saver ? Ui.tr("Tela de Descanso", "Screensaver")
+                    : Ui.tr("Ajustes do Início", "Home Settings"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             for (int i = 0; i < labels.length; i++) {
                 float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = !keys && i >= COIN_ROWS && !Prefs.quotes();
+                boolean locked = screen == HOME_SETTINGS && i >= COIN_ROWS && !Prefs.quotes();
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -1012,6 +1156,15 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText(Ui.tr("OK ou as setas mudam o valor.", "OK or the arrows change the value."), LIST_X * k + 30 * k, hy, hint);
+            if (saver) {
+                Power.Timeouts t = timeouts;
+                String line = !powerLine.isEmpty() ? powerLine
+                        : t != null && t.stayOnPlugged ? Ui.tr("Na tomada, a tela de descanso não começa.", "While plugged in, the screensaver doesn't start.")
+                        : ttfx && saverRows()[focus] == S_PREVIEW ? Ui.tr("OK mostra; no Terminal, → é o próximo efeito.", "OK previews it; in Terminal, → is the next effect.")
+                        : "";
+                c.drawText(TextUtils.ellipsize(line, new TextPaint(hint), (LIST_R - LIST_X - 30) * k, TextUtils.TruncateAt.END).toString(),
+                        LIST_X * k + 30 * k, hy + 38 * k, hint);
+            }
             if (keys) {
                 c.drawText(RemoteKeys.VESTEL ? Ui.tr("YouTube, Prime Video e Google Play: a própria TV controla esses botões.",
                         "YouTube, Prime Video and Google Play: the TV itself controls those buttons.")
@@ -1058,6 +1211,15 @@ public class SettingsActivity extends Activity {
             } else if (screen == HOME_SETTINGS && focus == CITY_ROW) {
                 askCity();
                 return;
+            } else if (screen == SCREENSAVER && saverRows()[focus] == S_PREVIEW) {
+                pause();
+                activity.showPreview();     // the look chosen; closing it comes back to this row
+                return;
+            } else if (screen == SCREENSAVER) {
+                adjustSaver(1);
+                invalidate();
+                spoken.focusMoved();
+                return;
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);
                 invalidate();
@@ -1067,8 +1229,10 @@ public class SettingsActivity extends Activity {
                 screen = HOME_CHOICE;
                 focus = freeActive() ? 0 : 1;
             } else if (focus == 1) {
-                pause();
-                activity.showPreview();
+                screen = SCREENSAVER;
+                focus = 0;
+                powerLine = "";
+                refreshTimeouts();
             } else if (focus == 2) {
                 screen = HOME_SETTINGS;
                 focus = 0;

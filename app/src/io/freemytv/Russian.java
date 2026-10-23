@@ -51,6 +51,15 @@ final class Russian {
             case "Photos and clock": return "Фото и часы";
             case "Screensaver": return "Заставка";
             case "Preview": return "Предпросмотр";
+            case "Look": return "Вид";
+            case "Start after": return "Запуск через";
+            case "Sleep after": return "Сон через";
+            case "Never": return "Никогда";
+            case "Couldn't read the power settings.": return "Не удалось прочитать настройки питания.";
+            case "Couldn't change the power settings.": return "Не удалось изменить настройки питания.";
+            case "The TV didn't take that change.": return "Телевизор не принял это изменение.";
+            case "While plugged in, the screensaver doesn't start.": return "От сети заставка не включается.";
+            case "OK previews it; in Terminal, → is the next effect.": return "OK показывает её; в Terminal → — следующий эффект.";
             case "On the TV: tick “Always allow” and press OK.": return "На телевизоре отметьте «Всегда разрешать» и нажмите OK.";
             case "RECOMMENDATIONS": return "РЕКОМЕНДАЦИИ";
             case "No TMDB key: see the README (config.properties).": return "Нет ключа TMDB: см. README (config.properties).";

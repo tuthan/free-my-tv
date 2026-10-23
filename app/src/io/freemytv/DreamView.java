@@ -38,7 +38,7 @@ import java.util.concurrent.Executors;
  *  - bottom left, the photo's caption: the time-of-day label ("TONIGHT"), the title, and genre · runtime · service.
  * Dark scrims only where there is text, stronger where the photo is bright. Any key exits (as on Apple TV).
  * Without photos (no TMDB key, or before the first fetch): the big clock over the night aurora, wandering slowly.
- * The Terminal look (Settings, Home Settings, Screensaver) replaces all of it with TerminalLook, and falls back to the
+ * The Terminal look (Settings, Screensaver) replaces all of it with TerminalLook, and falls back to the
  * big clock if that fails.
  */
 final class DreamView extends View implements Choreographer.FrameCallback, HomeData.Listener, Recs.Listener {
@@ -142,8 +142,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private float k = 1;
     private long minute = -1;
     private TerminalLook terminal;  // the Terminal look, while it runs
+    private int drawnX = Integer.MIN_VALUE, drawnY;   // its drift and dim when last drawn
+    private float drawnDim;
     private String look;            // null: the one in Settings (the preview can ask for another)
-    private long cycleMs;           // the Terminal look's new effect every minute; shorter only for tests
+    private long cycleMs;           // the Terminal look's effects; 0: as in Settings (other values for tests)
     private String clock = "", date = "";
     private Paint datePaint, clockPaint, weatherPaint, weatherDim, quotePaint, stalePaint;
     private Paint cornerDate, cornerQuote, cornerStale, cornerClock, labelPaint, metaPaint;
@@ -183,7 +185,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         chrome.setHasOverlappingRendering(false);
     }
 
-    /** For the preview from ADB: this look instead of the one in Settings, a new effect every cycleMs (0: a minute). */
+    /** For the preview from ADB: this look instead of the one in Settings, a new effect every cycleMs (0: as set). */
     void setLook(String look, long cycleMs) {
         this.look = look;
         this.cycleMs = cycleMs;
@@ -208,8 +210,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         lastFrame = 0;
         failed.clear();
         fallback = recs.showcase().isEmpty();
+        Prefs.reload();     // what Settings changed since (Android 11 runs this in another process)
         if ("terminal".equals(look != null ? look : Prefs.look()) && TtfxProcess.available(getContext())) {
-            terminal = new TerminalLook(getContext(), cycleMs);
+            terminal = new TerminalLook(getContext(), cycleMs > 0 ? cycleMs : Prefs.effectEvery() * 1000L);
+            drawnX = Integer.MIN_VALUE;
             if (w > 0) terminal.setSize(w, h);
             terminal.start();
             fallback = true;    // no photos with it: if it fails, the big clock
@@ -444,13 +448,28 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     // Motion is slow (under half a pixel per frame). Measured on the TV: ~4 ms of GPU per frame of ours, but drawing
     // every frame, it only reaches ~50 fps (the system also composites the UI on the GPU); at 20 there's room to spare.
 
+    // The Terminal look between two effects is still: it's drawn only when the drift moves a pixel or the dim changes
+    // (every second or two), not 20 times a second.
     @Override public void doFrame(long frameTimeNanos) {
         if (!running) return;
-        if (frameTimeNanos - lastFrame >= 45_000_000L) {
+        if (frameTimeNanos - lastFrame >= 45_000_000L && terminalChanges()) {
             lastFrame = frameTimeNanos;
             invalidate();
         }
         Choreographer.getInstance().postFrameCallback(this);
+    }
+
+    /** False only for the Terminal look standing still, with the same drift and dim as last drawn. */
+    private boolean terminalChanges() {
+        if (terminal == null || terminal.failed() || terminal.busy(System.currentTimeMillis())) return true;
+        long up = clock();
+        drift(up);
+        return driftX != drawnX || driftY != drawnY || terminalDim(up) != drawnDim;
+    }
+
+    /** The Terminal look's brightness: dimmed over a few seconds after ten minutes, like the other looks. */
+    private float terminalDim(long up) {
+        return 1 - (1 - CHROME_DIM) * fadeIn(up - startedAt - DIM_AFTER_MS, DIM_MS);
     }
 
     /** The clock that drives the animations. */
@@ -474,8 +493,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             // Black, as a terminal; the grid drifts with the other looks' path and dims after ten minutes like them.
             canvas.drawRect(0, 0, w, h, black);
             drift(up);
-            float dim = 1 - (1 - CHROME_DIM) * fadeIn(up - startedAt - DIM_AFTER_MS, DIM_MS);
-            terminal.draw(canvas, now, driftX, driftY, dim);
+            drawnX = driftX;
+            drawnY = driftY;
+            drawnDim = terminalDim(up);
+            terminal.draw(canvas, now, driftX, driftY, drawnDim);
             return;
         }
         if (running) advance(up);

@@ -17,8 +17,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The Terminal screensaver look: the time in a block font with the date under it, rebuilt at each new minute by one of
- * ttfx's effects (TtfxProcess) in the TV's own colours, on black. DreamView hosts it: the same drift and ten-minute dim
+ * The Terminal screensaver look: the time in a block font with the date under it, rebuilt every 30 s to 5 minutes
+ * (Settings) by one of ttfx's effects (TtfxProcess) in the TV's own colours, on black. A new minute between two effects
+ * runs the last one again unseen, read straight to its end, so the time changes in place. DreamView hosts it: the same drift and ten-minute dim
  * as its other looks, and its big clock instead if anything here fails (no binary, exec refused, a child that dies or
  * writes a frame that doesn't parse). The UI thread decides and draws; one "ttfx" thread starts the child, reads and
  * parses, so the engine never runs on the UI thread. No child outlives stop().
@@ -63,13 +64,16 @@ final class TerminalLook {
     private final Paint glyph = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final Paint block = new Paint(), shade = new Paint();
     private final char[] one = new char[2];
-    private final long cycleMs;     // 60 s; shorter only for tests (SettingsActivity's ttfx_cycle_s extra)
+    private final long cycleMs;     // between two effects (Settings; SettingsActivity's ttfx_cycle_s for tests)
 
     // UI thread only.
     private int[] cells = new int[COLS * ROWS * 3], spare = new int[COLS * ROWS * 3];
     private volatile TtfxProcess process;    // also killed from the UI thread
     private int generation, framesRead, lastEffect = -1;
     private long period = -1, firstUp;
+    private long minute = -1;           // the one the clock on screen shows
+    private List<String> lastArgs;      // the last effect shown, for the minutes between two effects
+    private boolean quiet;              // this run is only for its last frame: read to its end, shown once
     private boolean pulling, ended, failed, running, stopped;
     private int w, h;
     private float cw, ch, left, top, baseline;
@@ -87,6 +91,14 @@ final class TerminalLook {
 
     boolean failed() {
         return failed;
+    }
+
+    /** Something new for the next draw: an effect playing, a new run due, or rows not drawn yet. */
+    boolean busy(long now) {
+        if (pulling || !ended) return true;
+        if (now / cycleMs != period || (now / 60_000 != minute && lastArgs != null)) return true;
+        for (boolean d : dirty) if (d) return true;
+        return false;
     }
 
     /** A new run with the next effect at the next frame drawn, rather than at the minute. */
@@ -140,11 +152,15 @@ final class TerminalLook {
         long up = SystemClock.uptimeMillis();
         if (running && !failed && now / cycleMs != period) {
             period = now / cycleMs;
-            begin(now);
+            minute = now / 60_000;
+            begin(now, false);
+        } else if (running && !failed && now / 60_000 != minute && lastArgs != null) {
+            minute = now / 60_000;
+            begin(now, true);
         }
         if (running && !failed && !pulling && !ended) {
             long behind = Math.round((up - firstUp) * 60 / 1000.0) + 1 - framesRead;
-            int due = framesRead == 0 ? 1 : (int) Math.min(MAX_STEP, behind);
+            int due = quiet ? Integer.MAX_VALUE : framesRead == 0 ? 1 : (int) Math.min(MAX_STEP, behind);
             if (due > 0) pull(due);
         }
         for (int r = 0; r < ROWS; r++) {
@@ -161,8 +177,10 @@ final class TerminalLook {
 
     // MARK: - The runs
 
-    private void begin(long now) {
+    /** A new run: a new effect, or (quiet) the last one again for the new minute. */
+    private void begin(long now, boolean quiet) {
         int gen = ++generation;
+        this.quiet = quiet;
         TtfxProcess old = process;
         process = null;
         if (old != null) old.kill();    // its frame stays on screen until the new one's first frame
@@ -170,7 +188,8 @@ final class TerminalLook {
         ended = false;
         pulling = true;
         String text = text(Ui.clock(now), Ui.date(now));
-        List<String> args = args();
+        List<String> args = quiet && lastArgs != null ? lastArgs : args();
+        lastArgs = args;
         thread.execute(() -> {
             if (old != null) old.waitFor();
             TtfxProcess p;
