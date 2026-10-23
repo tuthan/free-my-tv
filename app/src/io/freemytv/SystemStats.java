@@ -24,11 +24,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The drawer's System card: CPU load and clock, memory, and the network (connection, Wi-Fi signal and speed, traffic,
- * address, internet). Only what any app may read: Android 8+ keeps /proc/stat from apps, so the CPU load comes from
+ * The home screen's system line (Home Settings → System widget): CPU load and clock, memory, and the network
+ * (connection, Wi-Fi signal and speed, traffic, address, internet). Only what any app may read: Android 8+ keeps /proc/stat from apps, so the CPU load comes from
  * the cores' idle time in sysfs (the same figure within a point, measured on the TCL); memory from ActivityManager;
  * the network from ConnectivityManager, WifiManager and TrafficStats. No temperature: apps can't read it.
- * Read every 2 s on its own thread, only while the card shows (start and stop, from HomeView).
+ * Read every 2 s on its own thread, only while the line shows (start and stop, from HomeView).
  */
 final class SystemStats {
     static final int NONE = 0, WIFI = 1, ETHERNET = 2, OTHER = 3;
@@ -97,7 +97,7 @@ final class SystemStats {
         main.postDelayed(tick, EVERY_MS);
     }
 
-    /** On the IO thread. `fresh`: the rates start over (the card was away). */
+    /** On the IO thread. `fresh`: the rates start over (the line was away). */
     private void read(int gen, boolean fresh) {
         Sample s = new Sample();
         try {
@@ -191,7 +191,7 @@ final class SystemStats {
         trafficAt = now;
     }
 
-    // MARK: - Text, for the card and TalkBack
+    // MARK: - Text, for the line
 
     static String cpu(Sample s, boolean full) {
         String load = Float.isNaN(s.cpu) ? "—" : NumberFormat.getPercentInstance(Ui.locale()).format(s.cpu);

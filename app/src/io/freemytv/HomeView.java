@@ -138,7 +138,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
-    private int widgetIndex;    // with TalkBack on, the drawer's weather (0), quotes (1) or system (2) card can take the focus
+    private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     private final Spring[] topFocus = new Spring[6];
     private final RectF[] topRects = new RectF[6];
@@ -207,8 +207,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int drawerInputs;          // how many leading items are inputs (the rest are shortcuts)
     private Spring[] drawerFocus = new Spring[0];
     private RectF[] drawerRects = new RectF[0];
-    private final RectF weatherCard = new RectF(), quotesCard = new RectF(), systemCard = new RectF();
-    private final SystemStats stats;
+    private final RectF weatherCard = new RectF(), quotesCard = new RectF();
     private final Spring drawer = new Spring(0.46f, 0.92f, 0);
     private boolean drawerOpen;
     private int drawerIndex;
@@ -239,11 +238,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int weatherLinePrefs = -1;
     private String weatherLineLanguage = "";
     private long clockMinute = -1;
+    // The system line left of the corner buttons (Home Settings → System widget): its texts, built from each reading
+    private final SystemStats stats;
+    private String sysCpu = "", sysMemory = "", sysNet = "", sysWifi;   // sysWifi: the Wi-Fi symbol, null without Wi-Fi
+    private boolean sysDown;   // no internet: the network part in red
     private boolean okDown, backDown;
 
     private Paint labelPaint, metaPaint, clockPaint, buttonPaint, capsuleText, tipPaint, quotePaint, staleQuote;
     private Paint rowTitle, drawerLabel, cardTitle, cardText, cardDim, cardDimRight, bigTemp, hourPaint, hourTemp;
-    private Paint pricePaint, changePaint, sheetTitle;
+    private Paint pricePaint, changePaint, sheetTitle, sysValue, sysLabel;
     private TextPaint titlePaint, gridLabel, toastPaint;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -586,6 +589,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
+        sysValue = Ui.numbers(Ui.semibold, 26 * k, L_INK);
+        sysLabel = Ui.text(Ui.medium, 24 * k, L_DIM);
         lDate = Ui.text(Ui.semibold, 34 * k, L_DIM);
         lClock = Ui.numbers(Ui.light, 200 * k, L_INK);
         lClock.setLetterSpacing(-0.01f);
@@ -1451,20 +1456,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawerRects[i].set(x, top, x + tw, top + ROW_H * k);
             x += tw + gap;
         }
-        // A card that is off gives its room to the others: two share 58.5 / 41.5 %, all three 45 / 30 / 25 %.
-        RectF[] cards = {weatherCard, quotesCard, systemCard};
-        boolean[] on = {Prefs.weather(), Prefs.quotes() && HomeData.active().length > 0, Prefs.system()};
-        int count = (on[0] ? 1 : 0) + (on[1] ? 1 : 0) + (on[2] ? 1 : 0);
-        float[] share = count == 3 ? new float[] {0.45f, 0.3f, 0.25f} : new float[] {0.585f, 0.415f};
-        float from = 0, cardsTop = CARDS_TOP * k;
-        for (int i = 0, j = 0; i < cards.length; i++) {
-            if (!on[i]) continue;
-            float to = j == count - 1 ? 1 : from + share[j];
-            cards[i].set(left + (right - left) * from + (j > 0 ? 16 * k : 0), cardsTop,
-                    left + (right - left) * to - (j < count - 1 ? 16 * k : 0), cardsTop + CARDS_H * k);
-            from = to;
-            j++;
-        }
+        float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
+        boolean wx = Prefs.weather(), qt = Prefs.quotes() && HomeData.active().length > 0;
+        // A card that is off gives its room to the other one.
+        weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
+        quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
         drawerDirty = true;
     }
 
@@ -1476,12 +1472,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerIndex = shelf.isEmpty() ? 0 : nearest(drawerRects, tileRects[shelfIndex].centerX());
         for (int i = 0; i < drawerFocus.length; i++) drawerFocus[i].snap(i == drawerIndex ? 1 : 0);
         drawerDirty = true;
-        syncStats();
     }
 
     private void closeDrawer() {
         drawerOpen = false;
-        syncStats();
         drawer.target = 0;
         zone = Z_SHELF;
         for (Spring f : drawerFocus) f.snap(0);   // the drawer goes away: its focus doesn't need to animate
@@ -1530,7 +1524,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (top >= 0) drawDrawerTile(c, top);
         if (Prefs.weather()) drawWeatherCard(c, weatherCard);
         if (Prefs.quotes() && HomeData.active().length > 0) drawQuotesCard(c, quotesCard);
-        if (Prefs.system()) drawSystemCard(c, systemCard);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1593,24 +1586,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         fill.setShader(null);
         fill.setColor(tone(0x1A000000, 0x24FFFFFF));
         c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
-        // Narrow (all three cards on): fewer hours, and the sunrise and sunset without their words.
-        float hx = split + 30 * k, room = r.right - 30 * k - hx;
-        int cols = Math.max(1, Math.min(6, (int) (room / (78 * k))));
-        float hw = room / cols;
-        for (int i = 0; i < wx.hours.size() && i < cols; i++) {
+        float hx = split + 30 * k, hw = (r.right - 30 * k - hx) / 6;
+        for (int i = 0; i < wx.hours.size() && i < 6; i++) {
             float hc = hx + hw * (i + 0.5f);
             c.drawText(hourText[i], hc, r.top + 96 * k, hourPaint);
             Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
             c.drawText(hourTempText[i], hc, r.top + 196 * k, hourTemp);
         }
         float sx = hx, base = r.top + 258 * k;
-        boolean words = sunWidth("sunrise", sunriseText) + 36 * k + sunWidth("sunset", sunsetText) <= room;
-        if (wx.sunrise != 0) sx = sunItem(c, "sunrise", words ? sunriseText : Ui.time(wx.sunrise), sx, base) + 36 * k;
-        if (wx.sunset != 0) sunItem(c, "sunset", words ? sunsetText : Ui.time(wx.sunset), sx, base);
-    }
-
-    private float sunWidth(String symbol, String label) {
-        return Symbols.width(getContext(), symbol, 22 * k) + 10 * k + cardDim.measureText(label);
+        if (wx.sunrise != 0) sx = sunItem(c, "sunrise", sunriseText, sx, base) + 36 * k;
+        if (wx.sunset != 0) sunItem(c, "sunset", sunsetText, sx, base);
     }
 
     private void refreshDrawerText() {
@@ -1695,7 +1680,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    private final Snapshot weatherSnapshot = new Snapshot(), quotesSnapshot = new Snapshot(), systemSnapshot = new Snapshot();
+    private final Snapshot weatherSnapshot = new Snapshot(), quotesSnapshot = new Snapshot();
 
     private void drawPrices(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 34 * k;
@@ -1723,67 +1708,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** CPU, memory and the network (SystemStats), every 2 s while the drawer is open. */
-    private void drawSystemCard(Canvas c, RectF r) {
-        drawerCard(c, r);
-        if (Ui.LIGHT) systemSnapshot.draw(c, r, drawerCardsKey() + "|" + stats.last.at, cc -> drawSystem(cc, r));
-        else drawSystem(c, r);
-    }
-
-    private void drawSystem(Canvas c, RectF r) {
-        SystemStats.Sample s = stats.last;
-        float x = r.left + 34 * k, right = r.right - 34 * k;
-        String title = Ui.tr("Sistema", "System");
-        c.drawText(title, x, r.top + 54 * k, cardTitle);
-        // Top right: the internet (red when it's missing) and the TV's address, if there's room for it.
-        String status = SystemStats.status(s), address = s.ip.isEmpty() ? status : status + " · " + s.ip;
-        float room = right - x - cardTitle.measureText(title) - 24 * k;
-        int dim = cardDimRight.getColor();
-        if (!status.isEmpty() && !s.internet) cardDimRight.setColor(tone(0xFFD70015, DOWN_COLOR));
-        c.drawText(cardDimRight.measureText(address) <= room ? address : status, right, r.top + 54 * k, cardDimRight);
-        cardDimRight.setColor(dim);
-        systemRow(c, r, 0, "CPU", 0, SystemStats.cpu(s, true), SystemStats.cpu(s, false));
-        systemRow(c, r, 1, Ui.tr("Memória", "Memory"), 0, SystemStats.memory(s, true), SystemStats.memory(s, false));
-        float bars = s.bars >= 0 ? 54 * k : 0;
-        float labelEnd = systemRow(c, r, 2, SystemStats.netLabel(s), bars, SystemStats.netValue(s, true),
-                SystemStats.netValue(s, false));
-        if (bars > 0 && labelEnd > 0) signalBars(c, labelEnd + 14 * k, r.top + 214 * k, s.bars);
-        systemRow(c, r, 3, Ui.tr("Tráfego", "Traffic"), 0, SystemStats.traffic(s), SystemStats.traffic(s));
-    }
-
-    /**
-     * One System card row: the label on the left, the value on the right. A value too wide for both is shortened, then
-     * shown alone. Returns where the label ends (0 if it was left out), for what follows it (the Wi-Fi bars).
-     */
-    private float systemRow(Canvas c, RectF r, int row, String label, float extra, String value, String shorter) {
-        float x = r.left + 34 * k, right = r.right - 34 * k, base = r.top + (110 + 52 * row) * k;
-        float labelW = cardText.measureText(label) + extra + 24 * k;
-        if (x + labelW + pricePaint.measureText(value) > right) value = shorter;
-        boolean withLabel = x + labelW + pricePaint.measureText(value) <= right;
-        if (withLabel) c.drawText(label, x, base, cardText);
-        c.drawText(value, right, base, pricePaint);
-        return withLabel ? x + cardText.measureText(label) : 0;
-    }
-
-    /** Four bars like the TV's own Wi-Fi icon, `level` of them lit, standing on the text's baseline. */
-    private void signalBars(Canvas c, float x, float base, int level) {
-        fill.setShader(null);
-        for (int i = 0; i < 4; i++) {
-            float bh = (10 + 4.5f * i) * k, bx = x + i * 11 * k;
-            fill.setColor(drawerInk(i < level ? 0.95f : 0.22f));
-            tmp.set(bx, base - bh, bx + 7 * k, base);
-            c.drawRoundRect(tmp, 1.5f * k, 1.5f * k, fill);
-        }
-    }
-
-    /** The System card's numbers sampled only while it shows: the drawer open and the card on. */
+    /** The system line's numbers sampled only while it shows: the home screen in front and the widget on. */
     private void syncStats() {
-        if (running && drawerOpen && Prefs.system()) stats.start(this::onStats);
+        if (running && Prefs.system()) stats.start(this::onStats);
         else stats.stop();
+        statusDirty = true;
     }
 
+    private static final String[] WIFI_BARS = {"wifi_1", "wifi_1", "wifi_2", "wifi_3", "wifi_4"};
+
+    /** A new reading: the line's texts, built here so that drawing it allocates nothing. */
     private void onStats() {
-        drawerDirty = true;
+        SystemStats.Sample s = stats.last;
+        sysCpu = SystemStats.cpu(s, false);
+        sysMemory = SystemStats.memory(s, false);
+        sysDown = s.net == SystemStats.NONE || !s.internet;
+        sysNet = sysDown ? SystemStats.status(s) : s.net == SystemStats.WIFI ? SystemStats.netValue(s, false) : SystemStats.netLabel(s);
+        sysWifi = s.net == SystemStats.WIFI && s.bars >= 0 ? WIFI_BARS[Math.min(4, s.bars)] : null;
+        statusDirty = true;
         wake();
     }
 
@@ -2505,7 +2447,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 }
                 return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
-            case WIDGETS: return i == 0 ? weatherText() : i == 1 ? quotesText() : systemText();
+            case WIDGETS: return i == 0 ? weatherText() : quotesText();
             default: return "";
         }
     }
@@ -2549,7 +2491,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case WIDGETS:
                 if (!drawerOpen) return false;
-                a11yRect.set(i == 0 ? weatherCard : i == 1 ? quotesCard : systemCard);
+                a11yRect.set(i == 0 ? weatherCard : quotesCard);
                 dy = 0;
                 break;
             default:
@@ -2575,13 +2517,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** The drawer's widgets that are on (0 weather, 1 quotes, 2 system), with the drawer open. */
+    /** The drawer's widgets that are on (0 weather, 1 quotes), with the drawer open. */
     private List<Integer> widgets() {
         List<Integer> out = new ArrayList<>();
         if (!drawerOpen) return out;
         if (Prefs.weather()) out.add(0);
         if (Prefs.quotes() && HomeData.active().length > 0) out.add(1);
-        if (Prefs.system()) out.add(2);
         return out;
     }
 
@@ -2682,21 +2623,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             s.append('.');
         }
         return s.toString();
-    }
-
-    /** The System card as TalkBack reads it, in words where the card has arrows and bars. */
-    private String systemText() {
-        SystemStats.Sample s = stats.last;
-        StringBuilder t = new StringBuilder(Ui.tr("Sistema", "System")).append(". CPU ").append(SystemStats.cpu(s, true))
-                .append(". ").append(Ui.tr("Memória", "Memory")).append(' ').append(SystemStats.memory(s, true))
-                .append(". ").append(SystemStats.netLabel(s)).append(' ').append(SystemStats.netValue(s, true));
-        if (s.bars >= 0) t.append(", ").append(Ui.tr("sinal ", "signal ")).append(s.bars).append(Ui.tr(" de 4", " of 4"));
-        t.append(". ").append(Ui.tr("Tráfego", "Traffic")).append(": ").append(Ui.tr("recebendo ", "down "))
-                .append(SystemStats.rate(s.rxBits)).append(", ").append(Ui.tr("enviando ", "up ")).append(SystemStats.rate(s.txBits));
-        String status = SystemStats.status(s);
-        if (!status.isEmpty()) t.append(". ").append(status);
-        if (!s.ip.isEmpty()) t.append(", ").append(s.ip);
-        return t.append('.').toString();
     }
 
     // MARK: - Light design: title, tabs, cards and icon-only buttons
@@ -2964,6 +2890,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
+        drawSystemLine(c);
         for (int i = 0; i < 3; i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
@@ -2989,6 +2916,40 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
             }
         }
+    }
+
+    /**
+     * Home Settings → System widget: CPU, memory and the network, right to left from the corner buttons (where the Rokid
+     * and XGIMI builds show the battery). The network part turns red without internet.
+     */
+    private void drawSystemLine(Canvas c) {
+        if (!Prefs.system() || stats.last.at == 0) return;
+        float x = topRects[3].left - 28 * k, cy = L_BUTTON_CY * k, base = cy + Ui.halfCap(sysValue);
+        int ink = tone(L_INK, 0xEBFFFFFF);
+        sysValue.setColor(sysDown ? tone(0xFFD70015, DOWN_COLOR) : ink);
+        sysLabel.setColor(tone(L_DIM, 0xB3FFFFFF));
+        if (!sysNet.isEmpty()) {
+            x -= sysValue.measureText(sysNet);
+            c.drawText(sysNet, x, base, sysValue);
+        }
+        if (sysWifi != null) {
+            float sw = Symbols.width(getContext(), sysWifi, 26 * k);
+            if (!sysNet.isEmpty()) x -= 8 * k;
+            Symbols.draw(getContext(), c, sysWifi, x - sw / 2, cy, 26 * k, sysValue.getColor());
+            x -= sw;
+        }
+        sysValue.setColor(ink);
+        x = systemPair(c, x - 36 * k, base, "RAM", sysMemory);
+        systemPair(c, x - 36 * k, base, "CPU", sysCpu);
+    }
+
+    /** A dim label and its value, the value ending at `right`; returns where the label starts. */
+    private float systemPair(Canvas c, float right, float base, String label, String value) {
+        float x = right - sysValue.measureText(value);
+        c.drawText(value, x, base, sysValue);
+        x -= 8 * k + sysLabel.measureText(label);
+        c.drawText(label, x, base, sysLabel);
+        return x;
     }
 
     private boolean moveLight(int dx, int dy) {
